@@ -70,6 +70,13 @@ Analytics highlights:
       accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699' // title color
     },
 
+    // Campaign messages
+    messages: {
+      base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || `${L.origin}/api/campaigns`,
+      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || `${L.origin}/api/campaigns/active-messages`,
+      enabled: (cfgAttr('data-messages-enabled') || 'true') === 'true',
+    },
+
     // Behavior
     autoInit: (cfgAttr('data-auto-init') || 'true') === 'true',
     consentRequired: (cfgAttr('data-consent-required') || 'false') === 'true',
@@ -206,7 +213,7 @@ Analytics highlights:
   // SPA hook: detect history navigation and treat as a pageview
   function hookSPA(){
     const _push = history.pushState, _replace = history.replaceState;
-    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush() }
+    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); pollActiveMessages() }
     history.pushState = function(){ _push.apply(this, arguments); onChange() };
     history.replaceState = function(){ _replace.apply(this, arguments); onChange() };
     W.addEventListener('popstate', onChange);
@@ -233,6 +240,67 @@ Analytics highlights:
         po2.observe({ type:'paint', buffered:true });
       } catch{}
     }
+  }
+
+  // --- Campaign messages (MVP) ----------------------------------------------
+  const shownCampaigns = new Set();
+  function injectCampaignStyle(){
+    if (D.getElementById('cc-campaign-style')) return;
+    const s = D.createElement('style'); s.id='cc-campaign-style'; s.textContent = `
+      .cc-cmp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:saturate(180%) blur(4px);z-index:2147483600;display:flex;align-items:center;justify-content:center}
+      .cc-cmp-modal{width:min(520px,92vw);background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee;font:500 14px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
+      .cc-cmp-hd{padding:14px 16px;font-weight:700;border-bottom:1px solid #f1f1f1}
+      .cc-cmp-bd{padding:14px 16px;color:#374151}
+      .cc-cmp-ft{display:flex;gap:10px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #f1f1f1}
+      .cc-cmp-btn{border:1px solid #ddd;border-radius:10px;padding:8px 12px;background:#fff;cursor:pointer}
+      .cc-cmp-btn.cta{background:#111;color:#fff;border-color:#111}
+      .cc-cmp-toast{position:fixed;right:16px;bottom:16px;z-index:2147483600;background:#111;color:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    `; D.head.appendChild(s);
+  }
+  async function pollActiveMessages(){
+    try {
+      if (!cfg.messages?.enabled) return;
+      if (!cfg.messages?.endpoint || !cfg.messages?.base) return;
+      const params = new URLSearchParams();
+      params.append('siteId', cfg.siteId);
+      params.append('vid', getVisitorId());
+      params.append('sid', getSessionId());
+      params.append('path', L.pathname || '');
+      const url = `${cfg.messages.endpoint}?${params.toString()}`;
+      const res = await fetch(url, { credentials: 'omit' });
+      const json = await res.json();
+      const msgs = Array.isArray(json.data) ? json.data : [];
+      for (const m of msgs){ if (!shownCampaigns.has(m.campaignId)) showMessage(m) }
+    } catch {}
+  }
+  async function postImpression(id){ try{ await fetch(`${cfg.messages.base}/${id}/impression`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', credentials:'omit' }) }catch{} }
+  async function postInteraction(id, payload){ try{ await fetch(`${cfg.messages.base}/${id}/interaction`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload||{}), credentials:'omit' }) }catch{} }
+  function showMessage(m){
+    injectCampaignStyle(); shownCampaigns.add(m.campaignId);
+    const d = m.delivery || {}; const layout = d.layout || 'modal';
+    if (layout === 'toast') return showToast(m);
+    const ov = D.createElement('div'); ov.className='cc-cmp-overlay';
+    const wrap = D.createElement('div'); wrap.className='cc-cmp-modal';
+    const hd = D.createElement('div'); hd.className='cc-cmp-hd'; hd.textContent = String(d.title || '');
+    const bd = D.createElement('div'); bd.className='cc-cmp-bd'; bd.textContent = String(d.body || '');
+    const ft = D.createElement('div'); ft.className='cc-cmp-ft';
+    const closeBtn = D.createElement('button'); closeBtn.className='cc-cmp-btn'; closeBtn.textContent='Close';
+    closeBtn.addEventListener('click', ()=>{ ov.remove(); postInteraction(m.campaignId, { action:'dismiss' }) });
+    ft.appendChild(closeBtn);
+    if (d.cta?.label && d.cta?.href){
+      const cta = D.createElement('a'); cta.className='cc-cmp-btn cta'; cta.textContent=String(d.cta.label); cta.href=String(d.cta.href); cta.target='_top';
+      cta.addEventListener('click', ()=> postInteraction(m.campaignId, { action:'click', href:String(d.cta.href) }));
+      ft.appendChild(cta);
+    }
+    wrap.appendChild(hd); wrap.appendChild(bd); wrap.appendChild(ft);
+    ov.appendChild(wrap); D.body.appendChild(ov);
+    postImpression(m.campaignId);
+  }
+  function showToast(m){
+    injectCampaignStyle(); const d = m.delivery || {};
+    const t = D.createElement('div'); t.className='cc-cmp-toast'; t.textContent = `${d.title ? d.title + ': ' : ''}${d.body || ''}`;
+    D.body.appendChild(t); postImpression(m.campaignId);
+    setTimeout(()=>{ t.remove() }, 6000);
   }
 
   // --- Search widget ---------------------------------------------------------
@@ -377,6 +445,8 @@ Analytics highlights:
     hookSPA();
     perf();
     trackPageview({ spa:false });
+    // After first pageview, check for active campaign messages
+    try{ pollActiveMessages() }catch{}
 
     // Scroll + click capture
     let scrollDebounce=0;
