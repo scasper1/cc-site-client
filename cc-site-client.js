@@ -25,11 +25,16 @@ Analytics highlights:
   const W = window, D = document, N = navigator, L = location;
 
   // --- Find this <script> so we can read data-* attributes -------------------
+  // Prefer the currently executing <script>; fall back to heuristic scan
   const scriptEl = (function(){
+    if (D.currentScript) return D.currentScript;
     const scripts = D.getElementsByTagName('script');
     for (let i=scripts.length-1; i>=0; i--){
       const el = scripts[i];
-      if (el && (el.hasAttribute('data-site-id') || el.getAttribute('src')?.includes('cc-embed'))) return el;
+      const src = el.getAttribute('src') || '';
+      // Match our file name variants or explicit attributes
+      if (src.includes('cc-site-client') || src.includes('cc-embed')) return el;
+      if (el.hasAttribute('data-site-id') && (el.hasAttribute('data-api-base') || src.includes('site-client'))) return el;
     }
     return null;
   })();
@@ -474,8 +479,8 @@ Analytics highlights:
 
   // sample script include tag
   <script
-    src="cc-site-client.js"
     data-site-id="your_key_here"
+    src="https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/cc-site-client.min.js"
     data-api-base="https://api.credibilitycompass.com/api/v1"
     <!-- Optional explicit overrides (fallbacks kept for compatibility): -->
     <!-- data-endpoint="https://api.credibilitycompass.com/api/v1/ingest" -->
