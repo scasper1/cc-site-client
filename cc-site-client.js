@@ -1,24 +1,4 @@
 /*
-  Credibility Compass – Lightweight Analytics + Search Widget (v0.1)
-  Single-file embeddable. No dependencies.
-
-  // sample script include tag
-  <script
-    src="cc-site-client.js"
-    data-site-id="your_key_here"
-    data-endpoint="https://api.credibilitycompass.com/api/v1/ingest"
-    data-search-endpoint="https://api.credibilitycompass.com/api/v1/search"
-    data-search-placeholder="Search…"
-    data-search-accent="#212ba0ff"
-    data-consent-required="false"
-    data-auto-init="true"
-    defer
-  ></script>
-  <meta name="cc-verification" content="your_key_here">
-
-*/
-
-/*
 Analytics highlights:
   - Respect Do Not Track + (optional) site consent gate
   - Visitor ID (localStorage) + Session ID (30m inactivity)
@@ -56,14 +36,30 @@ Analytics highlights:
 
   // --- Config ---------------------------------------------------------------
   const cfgAttr = (name, def=null)=> scriptEl?.getAttribute(name) ?? def;
+  // Normalize and derive helpers for API base → endpoints
+  const normBase = (b)=>{
+    if (!b) return '';
+    try {
+      const u = new URL(b);
+      return u.href.endsWith('/') ? u.href : (u.href + '/');
+    } catch { return '' }
+  };
+  const apiBase = normBase(cfgAttr('data-api-base') || W.CC_EMBED_OPTS?.apiBase || '');
+  const derive = (p)=>{
+    if (!apiBase) return '';
+    const seg = String(p||'').replace(/^\//,'');
+    try { return new URL(seg, apiBase).toString().replace(/\/$/,'') } catch { return '' }
+  };
   const cfg = {
     // Core
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || '',
-    endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || '',
+    // Prefer explicit endpoint; otherwise derive from base (if provided)
+    endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || derive('ingest'),
 
     // Search widget config
     search: {
-      endpoint: cfgAttr('data-search-endpoint') || W.CC_EMBED_OPTS?.search?.endpoint || '',
+      // Prefer explicit search endpoint; else derive from base
+      endpoint: cfgAttr('data-search-endpoint') || W.CC_EMBED_OPTS?.search?.endpoint || derive('search'),
       placeholder: cfgAttr('data-search-placeholder') || 'Search…',
       hotkey: (cfgAttr('data-search-hotkey') || 'Ctrl+K').toLowerCase(),
       enabled: (cfgAttr('data-search-enabled') || 'true') === 'true',
@@ -72,8 +68,9 @@ Analytics highlights:
 
     // Campaign messages
     messages: {
-      base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || `${L.origin}/api/campaigns`,
-      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || `${L.origin}/api/campaigns/active-messages`,
+      // Prefer explicit message URLs; else derive from base; else fallback to local origin
+      base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns') || `${L.origin}/api/campaigns`,
+      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages') || `${L.origin}/api/campaigns/active-messages`,
       enabled: (cfgAttr('data-messages-enabled') || 'true') === 'true',
     },
 
@@ -469,3 +466,26 @@ Analytics highlights:
   if (D.readyState === 'complete' || D.readyState === 'interactive') init();
   else D.addEventListener('DOMContentLoaded', init);
 })();
+
+
+/*
+  Credibility Compass – Lightweight Analytics + Search Widget (v0.1)
+  Single-file embeddable. No dependencies.
+
+  // sample script include tag
+  <script
+    src="cc-site-client.js"
+    data-site-id="your_key_here"
+    data-api-base="https://api.credibilitycompass.com/api/v1"
+    <!-- Optional explicit overrides (fallbacks kept for compatibility): -->
+    <!-- data-endpoint="https://api.credibilitycompass.com/api/v1/ingest" -->
+    <!-- data-search-endpoint="https://api.credibilitycompass.com/api/v1/search" -->
+    data-search-placeholder="Search…"
+    data-search-accent="#212ba0ff"
+    data-consent-required="false"
+    data-auto-init="true"
+    defer
+  ></script>
+  <meta name="cc-verification" content="your_key_here">
+
+*/
