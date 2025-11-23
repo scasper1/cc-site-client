@@ -299,7 +299,13 @@ Analytics highlights:
       const ctx = currentCtx();
       if (!ctx.siteId) return; // avoid 400s when siteId missing
       const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
-      await fetch(`${cfg.messages.base}/${id}/impression?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ctx), credentials:'omit' })
+      const url = `${cfg.messages.base}/${id}/impression?${params.toString()}`;
+      try { console.log('[CC embed] impression request', { id, url, ctx }); } catch {}
+      const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ctx), credentials:'omit' });
+      try {
+        let json=null; try{ json = await res.clone().json() }catch{}
+        console.log('[CC embed] impression response', { status: res.status, ok: res.ok, json });
+      } catch {}
     }catch{}
   }
   async function postInteraction(id, payload){
@@ -308,7 +314,13 @@ Analytics highlights:
       if (!ctx.siteId) return;
       const body = Object.assign({}, ctx, payload||{});
       const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
-      await fetch(`${cfg.messages.base}/${id}/interaction?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+      const url = `${cfg.messages.base}/${id}/interaction?${params.toString()}`;
+      try { console.log('[CC embed] interaction request', { id, url, body }); } catch {}
+      const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' });
+      try {
+        let json=null; try{ json = await res.clone().json() }catch{}
+        console.log('[CC embed] interaction response', { status: res.status, ok: res.ok, json });
+      } catch {}
     }catch{}
   }
   function showMessage(m){
