@@ -41,7 +41,6 @@ Analytics highlights:
 
   // --- Config ---------------------------------------------------------------
   const cfgAttr = (name, def=null)=> scriptEl?.getAttribute(name) ?? def;
-  console.log(cfgAttr);
   
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
@@ -52,7 +51,6 @@ Analytics highlights:
     } catch { return '' }
   };
   const apiBase = normBase(cfgAttr('data-api-base') || W.CC_EMBED_OPTS?.apiBase || '');
-  console.log(apiBase)
   const derive = (p)=>{
     if (!apiBase) return '';
     const seg = String(p||'').replace(/^\//,'');
@@ -120,7 +118,6 @@ Analytics highlights:
       path: L.pathname || '',
       ts: now()
     };
-    console.log(ctx);
     return ctx;
   }
 
