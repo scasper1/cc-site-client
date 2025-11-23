@@ -276,8 +276,18 @@ Analytics highlights:
       for (const m of msgs){ if (!shownCampaigns.has(m.campaignId)) showMessage(m) }
     } catch {}
   }
-  async function postImpression(id){ try{ await fetch(`${cfg.messages.base}/${id}/impression`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', credentials:'omit' }) }catch{} }
-  async function postInteraction(id, payload){ try{ await fetch(`${cfg.messages.base}/${id}/interaction`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload||{}), credentials:'omit' }) }catch{} }
+  async function postImpression(id){
+    try{
+      const body = { siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() };
+      await fetch(`${cfg.messages.base}/${id}/impression`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+    }catch{}
+  }
+  async function postInteraction(id, payload){
+    try{
+      const body = Object.assign({ siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() }, payload||{});
+      await fetch(`${cfg.messages.base}/${id}/interaction`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+    }catch{}
+  }
   function showMessage(m){
     injectCampaignStyle(); shownCampaigns.add(m.campaignId);
     const d = m.delivery || {}; const layout = d.layout || 'modal';
