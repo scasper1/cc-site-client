@@ -56,9 +56,12 @@ Analytics highlights:
     const seg = String(p||'').replace(/^\//,'');
     try { return new URL(seg, apiBase).toString().replace(/\/$/,'') } catch { return '' }
   };
+  const metaSiteId = (function(){
+    try { return D.querySelector('meta[name="cc-verification"]')?.getAttribute('content') || '' } catch { return '' }
+  })();
   const cfg = {
     // Core
-    siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || '',
+    siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
     // Prefer explicit endpoint; otherwise derive from base (if provided)
     endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || derive('ingest'),
 
@@ -92,6 +95,7 @@ Analytics highlights:
 
   // Debug helper (optional)
   W.__CC_EMBED_CFG__ = cfg;
+  if (!cfg.siteId) { try { console.warn('[CC embed] Missing siteId. Set data-site-id or <meta name="cc-verification">'); } catch {} }
 
   // --- Small utils -----------------------------------------------------------
   const now = ()=> Date.now();
