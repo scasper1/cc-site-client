@@ -120,6 +120,7 @@ Analytics highlights:
       path: L.pathname || '',
       ts: now()
     };
+    console.log(ctx);
     return ctx;
   }
 
