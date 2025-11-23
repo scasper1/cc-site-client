@@ -41,6 +41,8 @@ Analytics highlights:
 
   // --- Config ---------------------------------------------------------------
   const cfgAttr = (name, def=null)=> scriptEl?.getAttribute(name) ?? def;
+  console.log(cfgAttr);
+  
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
     if (!b) return '';
@@ -108,6 +110,18 @@ Analytics highlights:
     del(k){ try{ localStorage.removeItem(k) }catch{} }
   };
   const clamp = (n,min,max)=> Math.max(min, Math.min(max, n));
+
+  // Unified context for all network calls (siteId, vid, sid, path, ts)
+  function currentCtx(){
+    const ctx = {
+      siteId: cfg.siteId || '',
+      vid: getVisitorId(),
+      sid: getSessionId(),
+      path: L.pathname || '',
+      ts: now()
+    };
+    return ctx;
+  }
 
   // Safe HTML & highlight helpers
   function escapeHTML(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c])) }
@@ -268,11 +282,13 @@ Analytics highlights:
     try {
       if (!cfg.messages?.enabled) return;
       if (!cfg.messages?.endpoint || !cfg.messages?.base) return;
+      const ctx = currentCtx();
+      if (!ctx.siteId) return;
       const params = new URLSearchParams();
-      params.append('siteId', cfg.siteId);
-      params.append('vid', getVisitorId());
-      params.append('sid', getSessionId());
-      params.append('path', L.pathname || '');
+      params.append('siteId', ctx.siteId);
+      params.append('vid', ctx.vid);
+      params.append('sid', ctx.sid);
+      params.append('path', ctx.path);
       const url = `${cfg.messages.endpoint}?${params.toString()}`;
       const res = await fetch(url, { credentials: 'omit' });
       const json = await res.json();
@@ -282,17 +298,18 @@ Analytics highlights:
   }
   async function postImpression(id){
     try{
-      if (!cfg.siteId) return; // avoid 400s when siteId missing
-      const body = { siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() };
-      const params = new URLSearchParams({ siteId: cfg.siteId, vid: body.vid, sid: body.sid, path: body.path });
-      await fetch(`${cfg.messages.base}/${id}/impression?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+      const ctx = currentCtx();
+      if (!ctx.siteId) return; // avoid 400s when siteId missing
+      const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
+      await fetch(`${cfg.messages.base}/${id}/impression?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ctx), credentials:'omit' })
     }catch{}
   }
   async function postInteraction(id, payload){
     try{
-      if (!cfg.siteId) return;
-      const body = Object.assign({ siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() }, payload||{});
-      const params = new URLSearchParams({ siteId: cfg.siteId, vid: body.vid, sid: body.sid, path: body.path });
+      const ctx = currentCtx();
+      if (!ctx.siteId) return;
+      const body = Object.assign({}, ctx, payload||{});
+      const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
       await fetch(`${cfg.messages.base}/${id}/interaction?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
     }catch{}
   }
