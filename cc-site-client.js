@@ -282,14 +282,18 @@ Analytics highlights:
   }
   async function postImpression(id){
     try{
+      if (!cfg.siteId) return; // avoid 400s when siteId missing
       const body = { siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() };
-      await fetch(`${cfg.messages.base}/${id}/impression`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+      const params = new URLSearchParams({ siteId: cfg.siteId, vid: body.vid, sid: body.sid, path: body.path });
+      await fetch(`${cfg.messages.base}/${id}/impression?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
     }catch{}
   }
   async function postInteraction(id, payload){
     try{
+      if (!cfg.siteId) return;
       const body = Object.assign({ siteId: cfg.siteId, vid: getVisitorId(), sid: getSessionId(), path: L.pathname || '', ts: Date.now() }, payload||{});
-      await fetch(`${cfg.messages.base}/${id}/interaction`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
+      const params = new URLSearchParams({ siteId: cfg.siteId, vid: body.vid, sid: body.sid, path: body.path });
+      await fetch(`${cfg.messages.base}/${id}/interaction?${params.toString()}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' })
     }catch{}
   }
   function showMessage(m){
