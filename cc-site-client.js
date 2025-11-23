@@ -50,6 +50,7 @@ Analytics highlights:
     } catch { return '' }
   };
   const apiBase = normBase(cfgAttr('data-api-base') || W.CC_EMBED_OPTS?.apiBase || '');
+  console.log(apiBase)
   const derive = (p)=>{
     if (!apiBase) return '';
     const seg = String(p||'').replace(/^\//,'');
