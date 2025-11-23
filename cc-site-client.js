@@ -352,7 +352,31 @@ Analytics highlights:
   }
 
   // --- Search widget ---------------------------------------------------------
-  const styles = `
+  function parseRgbFromColor(color){
+    try{
+      if (!color) return null;
+      let c = String(color).trim();
+      if (c.startsWith('#')){
+        c = c.slice(1);
+        if (c.length === 3){ c = c.split('').map(x=>x+x).join('') }
+        if (c.length === 8){ c = c.slice(0,6) }
+        if (c.length === 6){
+          return [parseInt(c.slice(0,2),16), parseInt(c.slice(2,4),16), parseInt(c.slice(4,6),16)];
+        }
+      }
+      const m = c.match(/rgba?\s*\((\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+      if (m) return [parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10)];
+    }catch{}
+    return null;
+  }
+  function computeHighlightBg(){
+    const rgb = parseRgbFromColor(cfg.search?.accent || '#336699') || [51,102,153];
+    const alpha = 0.15; // 15% opacity
+    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+  }
+  function buildSearchStyles(){
+    const hl = computeHighlightBg();
+    return `
   .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
   .cc-search-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(4px);z-index:2147483001;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh}
   .cc-search-panel{width:min(720px,92vw);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee}
@@ -361,11 +385,12 @@ Analytics highlights:
   .cc-search-item{padding:12px 18px;border-bottom:1px solid #f4f4f5;cursor:pointer}
   .cc-search-item[aria-selected="true"]{background:#f5f7ff}
   .cc-search-empty{padding:16px 18px;color:#6b7280}
-  .cc-search-item .cc-hl{ background:#ffea7a; border-radius:3px; padding:0 2px }
-  `;
+  .cc-search-item .cc-hl{ background:${hl}; border-radius:3px; padding:0 2px }
+    `;
+  }
   function injectStyle(){
     if (D.getElementById('cc-embed-style')) return;
-    const s = D.createElement('style'); s.id='cc-embed-style'; s.textContent = styles; D.head.appendChild(s);
+    const s = D.createElement('style'); s.id='cc-embed-style'; s.textContent = buildSearchStyles(); D.head.appendChild(s);
   }
 
   function createSearch(){
