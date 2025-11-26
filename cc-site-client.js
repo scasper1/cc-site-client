@@ -208,6 +208,14 @@ Analytics highlights:
 
   // --- Trackers --------------------------------------------------------------
   function trackPageview(meta){ enqueue('pageview', Object.assign({ hash: L.hash || null }, meta||{})) }
+  // Public API for custom events: window.CC_EMBED.track('event_name', { ...payload })
+  try {
+    W.CC_EMBED = W.CC_EMBED || {};
+    W.CC_EMBED.track = function(type, payload){
+      try { enqueue(String(type||'custom'), payload && typeof payload==='object' ? payload : {}); scheduleFlush(); }
+      catch{}
+    };
+  } catch {}
   function trackScroll(){
     const H=D.documentElement, B=D.body;
     const scrollTop = W.scrollY || H.scrollTop || B.scrollTop || 0;
