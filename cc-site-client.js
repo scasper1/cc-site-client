@@ -80,7 +80,8 @@ Analytics highlights:
       // Prefer explicit message URLs; else derive from base; else fallback to local origin
       base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns') || `${L.origin}/api/campaigns`,
       endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages') || `${L.origin}/api/campaigns/active-messages`,
-      enabled: (cfgAttr('data-messages-enabled') || 'true') === 'true',
+      // Default to disabled; must be explicitly enabled via data-messages-enabled="true"
+      enabled: (cfgAttr('data-messages-enabled') || 'false') === 'true',
     },
 
     // Behavior
@@ -240,7 +241,7 @@ Analytics highlights:
   // SPA hook: detect history navigation and treat as a pageview
   function hookSPA(){
     const _push = history.pushState, _replace = history.replaceState;
-    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); pollActiveMessages() }
+    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); try{ if (cfg.messages?.enabled) pollActiveMessages() }catch{} }
     history.pushState = function(){ _push.apply(this, arguments); onChange() };
     history.replaceState = function(){ _replace.apply(this, arguments); onChange() };
     W.addEventListener('popstate', onChange);
@@ -527,7 +528,7 @@ Analytics highlights:
     perf();
     trackPageview({ spa:false });
     // After first pageview, check for active campaign messages
-    try{ pollActiveMessages() }catch{}
+    try{ if (cfg.messages?.enabled) pollActiveMessages() }catch{}
 
     // Scroll + click capture
     let scrollDebounce=0;
