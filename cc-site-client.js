@@ -554,10 +554,11 @@ Analytics highlights:
 })();
 
 
+
 /*
   Credibility Compass – Lightweight Analytics + Search Widget (v0.1)
   Single-file embeddable. No dependencies.
-
+  cc-admin-commit
   // sample script include tag
   <script
     src="https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/cc-site-client.min.js"
