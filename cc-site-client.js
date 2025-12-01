@@ -34,7 +34,7 @@ Analytics highlights:
       const src = el.getAttribute('src') || '';
       // Match our file name variants or explicit attributes
       if (src.includes('cc-site-client') || src.includes('cc-embed')) return el;
-      if (el.hasAttribute('data-site-id') && (el.hasAttribute('data-api-base') || src.includes('site-client'))) return el;
+      if (el.hasAttribute('data-site-id') || src.includes('site-client')) return el;
     }
     return null;
   })();
@@ -50,7 +50,9 @@ Analytics highlights:
       return u.href.endsWith('/') ? u.href : (u.href + '/');
     } catch { return '' }
   };
-  const apiBase = normBase(cfgAttr('data-api-base') || W.CC_EMBED_OPTS?.apiBase || '');
+  // Fixed API base for production Credibility Compass backend.
+  // All analytics, search, and campaign calls are made against this base.
+  const apiBase = normBase('https://api.credibilitycompass.com/api/v1');
   const derive = (p)=>{
     if (!apiBase) return '';
     const seg = String(p||'').replace(/^\//,'');
@@ -65,10 +67,9 @@ Analytics highlights:
     // Prefer explicit endpoint; otherwise derive from base (if provided)
     endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || derive('ingest'),
 
-    // Search widget config
+    // Search widget config (endpoint is always derived from apiBase to avoid external overrides)
     search: {
-      // Prefer explicit search endpoint; else derive from base
-      endpoint: cfgAttr('data-search-endpoint') || W.CC_EMBED_OPTS?.search?.endpoint || derive('search'),
+      endpoint: derive('search'),
       placeholder: cfgAttr('data-search-placeholder') || 'Search…',
       hotkey: (cfgAttr('data-search-hotkey') || 'Ctrl+K').toLowerCase(),
       enabled: (cfgAttr('data-search-enabled') || 'true') === 'true',
@@ -559,18 +560,12 @@ Analytics highlights:
 
   // sample script include tag
   <script
-    data-site-id="your_key_here"
     src="https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/cc-site-client.min.js"
-    data-api-base="https://api.credibilitycompass.com/api/v1"
-    <!-- Optional explicit overrides (fallbacks kept for compatibility): -->
-    <!-- data-endpoint="https://api.credibilitycompass.com/api/v1/ingest" -->
-    <!-- data-search-endpoint="https://api.credibilitycompass.com/api/v1/search" -->
-    data-search-placeholder="Search…"
-    data-search-accent="#212ba0ff"
-    data-consent-required="false"
-    data-auto-init="true"
-    defer
-  ></script>
+    data-site-id="YOUR_BRAND_TOKEN"
+    data-search-enabled="true"
+    data-search-placeholder="Search our site"
+    data-search-accent="#ec4899"
+    async>
+  </script>
   <meta name="cc-verification" content="your_key_here">
-
 */
