@@ -1,24 +1,25 @@
 /*
-Analytics highlights:
-  - Respect Do Not Track + (optional) site consent gate
-  - Visitor ID (localStorage) + Session ID (30m inactivity)
-  - UTM capture, referrer chain, device + viewport, timezone, language
-  - Pageview (incl. SPA route changes), scroll-depth, click/outbound link, search usage
-  - Heartbeat pings (visibility-aware) & performance timings (FCP/LCP if available)
-  - Error tracking (window.onerror/unhandledrejection)
-  - Batched delivery via navigator.sendBeacon with fetch fallback & retry queue
+  Credibility Compass – Site Embed Client
 
-  Search widget:
-  - Algolia-like command palette (Cmd/Ctrl + K) or click floating button
-  - Debounced queries to CC search endpoint; keyboard navigation; arrow keys/enter
-  - Accessible markup; minimal inline styles; shadow DOM isolation where possible
+  Features
+  - Lightweight analytics:
+      - Respects Do Not Track + optional consent gate
+      - Visitor + session IDs, UTM capture, referrer trail
+      - Pageviews (incl. SPA navigations), scroll depth, click/outbound links
+      - Heartbeat pings, basic performance + web-vitals, error tracking
+      - Batched delivery via sendBeacon with fetch fallback and retry
+  - Search widget:
+      - Floating launcher chip (button) + Cmd/Ctrl+K hotkey
+      - Debounced queries to the Credibility Compass search API
+      - Keyboard navigation (arrows + Enter), minimal inline styles
+      - CC logo in launcher chip and in the search bar
+  - Campaign messages:
+      - Modal / toast delivery powered by the campaigns API
 
-  NOTE: This is a reference implementation. Adjust endpoints & auth as needed.
-*/
-
-/*
-  Credibility Compass – Lightweight Analytics + Search Widget (v0.1)
-  Single-file embeddable. No dependencies.
+  Notes
+  - Fixed analytics/search/campaign base: https://api.credibilitycompass.com/api/v1
+  - SVG assets (logos) are resolved relative to the script URL with a CDN fallback.
+  - Adjust configuration via data-* attributes or window.CC_EMBED_OPTS.
 */
 
 (function(){
@@ -41,6 +42,23 @@ Analytics highlights:
 
   // --- Config ---------------------------------------------------------------
   const cfgAttr = (name, def=null)=> scriptEl?.getAttribute(name) ?? def;
+
+  // Resolve base URL for companion assets (SVG logo, etc.)
+  const scriptSrc = (scriptEl && scriptEl.getAttribute('src')) || '';
+  const scriptBase = (function(){
+    if (!scriptSrc) return '';
+    try {
+      const u = new URL(scriptSrc, L.href);
+      const path = u.pathname.replace(/[^/]+$/, '/');
+      return `${u.origin}${path}`;
+    } catch {
+      const i = scriptSrc.lastIndexOf('/');
+      return i >= 0 ? scriptSrc.slice(0, i + 1) : '';
+    }
+  })();
+  const cdnFallbackBase = 'https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/';
+  const assetBase = scriptBase || cdnFallbackBase;
+  const assetUrl = (file)=> assetBase + String(file || '');
   
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
@@ -73,7 +91,9 @@ Analytics highlights:
       placeholder: cfgAttr('data-search-placeholder') || 'Search…',
       hotkey: (cfgAttr('data-search-hotkey') || 'Ctrl+K').toLowerCase(),
       enabled: (cfgAttr('data-search-enabled') || 'true') === 'true',
-      accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699' // title color
+      accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699', // title color
+      logoLight: cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
+      logoDark: cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
 
     // Campaign messages
@@ -110,6 +130,23 @@ Analytics highlights:
     del(k){ try{ localStorage.removeItem(k) }catch{} }
   };
   const clamp = (n,min,max)=> Math.max(min, Math.min(max, n));
+
+  // Very small theme helper for light/dark detection
+  const darkMql = (function(){
+    try { return W.matchMedia && W.matchMedia('(prefers-color-scheme: dark)') } catch { return null }
+  })();
+  function isDarkMode(){
+    try {
+      const docEl = D.documentElement;
+      if (docEl){
+        if (docEl.classList.contains('dark')) return true;
+        const themeAttr = docEl.getAttribute('data-theme') || docEl.getAttribute('data-color-mode');
+        if (themeAttr && String(themeAttr).toLowerCase().includes('dark')) return true;
+      }
+      if (darkMql) return darkMql.matches;
+    } catch {}
+    return false;
+  }
 
   // Unified context for all network calls (siteId, vid, sid, path, ts)
   function currentCtx(){
@@ -387,10 +424,18 @@ Analytics highlights:
   function buildSearchStyles(){
     const hl = computeHighlightBg();
     return `
-  .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:10px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
+  .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
+  .cc-search-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
+  .cc-search-logo-wrap{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
+  .cc-search-logo{width:18px;height:18px;display:block}
+  .cc-search-label{white-space:nowrap}
+  .cc-search-btn kbd{margin-left:4px;padding:2px 6px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;font-size:11px;line-height:1.2;color:#4b5563}
+  .cc-search-input-row{display:flex;align-items:center;padding:10px 16px;border-bottom:1px solid #eee;background:#f9fafb;gap:10px}
+  .cc-search-input-logo-wrap{width:26px;height:26px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:#fff;box-shadow:0 0 0 1px rgba(15,23,42,.04);flex-shrink:0}
+  .cc-search-input-logo{width:20px;height:20px;display:block}
   .cc-search-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(4px);z-index:2147483001;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh}
   .cc-search-panel{width:min(720px,92vw);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee}
-  .cc-search-input{width:100%;border:0;outline:0;padding:16px 18px;font:500 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto;border-bottom:1px solid #eee}
+  .cc-search-input{width:100%;border:0;outline:0;padding:8px 0;font:500 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto;background:transparent}
   .cc-search-list{max-height:60vh;overflow:auto}
   .cc-search-item{padding:12px 18px;border-bottom:1px solid #f4f4f5;cursor:pointer}
   .cc-search-item[aria-selected="true"]{background:#f5f7ff}
@@ -413,9 +458,21 @@ Analytics highlights:
       if (overlay) return; // already open
       overlay = D.createElement('div'); overlay.className='cc-search-overlay';
       const panel = D.createElement('div'); panel.className='cc-search-panel';
+      const inputRow = D.createElement('div'); inputRow.className='cc-search-input-row';
+      const inputLogoWrap = D.createElement('span'); inputLogoWrap.className='cc-search-input-logo-wrap';
+      const inputLogoImg = D.createElement('img'); inputLogoImg.className='cc-search-input-logo'; inputLogoImg.alt='Credibility Compass';
+      // Search bar logo: always use light-bg symbol so it stays clean on white
+      try{
+        const src = cfg.search.logoLight || cfg.search.logoDark;
+        if (src) inputLogoImg.src = src;
+      }catch{}
+      inputLogoWrap.appendChild(inputLogoImg);
+
       input = D.createElement('input'); input.className='cc-search-input'; input.placeholder = cfg.search.placeholder;
+      inputRow.appendChild(inputLogoWrap);
+      inputRow.appendChild(input);
       list = D.createElement('div'); list.className='cc-search-list';
-      panel.appendChild(input); panel.appendChild(list); overlay.appendChild(panel); D.body.appendChild(overlay);
+      panel.appendChild(inputRow); panel.appendChild(list); overlay.appendChild(panel); D.body.appendChild(overlay);
       input.focus();
       trackSearchUI('open');
       overlay.addEventListener('click', (e)=>{ if (e.target===overlay) close() }); // click outside to close
@@ -497,7 +554,32 @@ Analytics highlights:
 
     // Floating launcher button
     const btn = D.createElement('button'); btn.type='button'; btn.className='cc-search-btn';
-    btn.innerHTML = 'Search <kbd>⌘/Ctrl K</kbd>';
+
+    const logoWrap = D.createElement('span'); logoWrap.className='cc-search-logo-wrap';
+    const logoImg = D.createElement('img'); logoImg.className='cc-search-logo'; logoImg.alt='Credibility Compass';
+    function updateLogo(){
+      try{
+        const dark = isDarkMode();
+        const src = dark ? (cfg.search.logoDark || cfg.search.logoLight) : cfg.search.logoLight;
+        if (src) logoImg.src = src;
+      }catch{}
+    }
+    updateLogo();
+    if (darkMql){
+      try{
+        if (darkMql.addEventListener) darkMql.addEventListener('change', updateLogo);
+        else if (darkMql.addListener) darkMql.addListener(updateLogo);
+      }catch{}
+    }
+    logoWrap.appendChild(logoImg);
+
+    const labelSpan = D.createElement('span'); labelSpan.className='cc-search-label'; labelSpan.textContent='Search';
+    const kbdEl = D.createElement('kbd'); kbdEl.className='cc-search-kbd'; kbdEl.textContent='⌘/Ctrl K';
+
+    btn.appendChild(logoWrap);
+    btn.appendChild(labelSpan);
+    btn.appendChild(kbdEl);
+
     btn.addEventListener('click', open); D.body.appendChild(btn);
 
     // Global hotkey (kept as your working version)
@@ -553,20 +635,17 @@ Analytics highlights:
   else D.addEventListener('DOMContentLoaded', init);
 })();
 
-
-
 /*
-  Credibility Compass – Lightweight Analytics + Search Widget (v0.1)
-  Single-file embeddable. No dependencies.
-  cc-admin-commit
-  // sample script include tag
+  Embed usage (example)
+
+  <meta name="cc-verification" content="YOUR_SITE_TOKEN">
+
   <script
     src="https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/cc-site-client.min.js"
-    data-site-id="YOUR_BRAND_TOKEN"
+    data-site-id="YOUR_SITE_ID"
     data-search-enabled="true"
     data-search-placeholder="Search our site"
     data-search-accent="#ec4899"
     async>
   </script>
-  <meta name="cc-verification" content="your_key_here">
 */
