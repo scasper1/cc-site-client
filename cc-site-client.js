@@ -8,16 +8,8 @@
       - Pageviews (incl. SPA navigations), scroll depth, click/outbound links
       - Heartbeat pings, basic performance + web-vitals, error tracking
       - Batched delivery via sendBeacon with fetch fallback and retry
-  - Search widget:
-      - Floating launcher chip (button) + Cmd/Ctrl+K hotkey
-      - Debounced queries to the Credibility Compass search API
-      - Keyboard navigation (arrows + Enter), minimal inline styles
-      - CC logo in launcher chip and in the search bar
-  - Campaign messages:
-      - Modal / toast delivery powered by the campaigns API
-
   Notes
-  - Fixed analytics/search/campaign base: https://api.credibilitycompass.com/api/v1
+  - Fixed analytics/search base: https://api.credibilitycompass.com/api/v1
   - SVG assets (logos) are resolved relative to the script URL with a CDN fallback.
   - Adjust configuration via data-* attributes or window.CC_EMBED_OPTS.
 */
@@ -80,10 +72,12 @@
     try { return D.querySelector('meta[name="cc-verification"]')?.getAttribute('content') || '' } catch { return '' }
   })();
   const cfg = {
-    // Core
+    // Core analytics + search
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
     // Prefer explicit endpoint; otherwise derive from base (if provided)
     endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || derive('ingest'),
+    // Optional site-key validation endpoint; when provided we verify before sending data
+    validateEndpoint: cfgAttr('data-site-validate-endpoint') || W.CC_EMBED_OPTS?.validateEndpoint || '',
 
     // Search widget config (endpoint is always derived from apiBase to avoid external overrides)
     search: {
@@ -94,15 +88,6 @@
       accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699', // title color
       logoLight: cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
-    },
-
-    // Campaign messages
-    messages: {
-      // Prefer explicit message URLs; else derive from base; else fallback to local origin
-      base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns') || `${L.origin}/api/campaigns`,
-      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages') || `${L.origin}/api/campaigns/active-messages`,
-      // Default to disabled; must be explicitly enabled via data-messages-enabled="true"
-      enabled: (cfgAttr('data-messages-enabled') || 'false') === 'true',
     },
 
     // Behavior
@@ -131,6 +116,10 @@
   };
   const clamp = (n,min,max)=> Math.max(min, Math.min(max, n));
 
+  // Site-key validation state
+  let siteKeyOk = cfg.siteId ? null : false; // null = unknown, true = valid, false = invalid/disabled
+  let siteKeyValidating = false;
+
   // Very small theme helper for light/dark detection
   const darkMql = (function(){
     try { return W.matchMedia && W.matchMedia('(prefers-color-scheme: dark)') } catch { return null }
@@ -158,6 +147,26 @@
       ts: now()
     };
     return ctx;
+  }
+
+  // Resolve URL for site-key validation
+  function buildValidateUrl(){
+    try{
+      if (cfg.validateEndpoint){
+        const u = new URL(cfg.validateEndpoint, apiBase || L.href);
+        if (cfg.siteId) u.searchParams.set('siteId', cfg.siteId);
+        return u.toString();
+      }
+    }catch{}
+    // Default: fixed validation route under the API base
+    try{
+      if (apiBase){
+        const u = new URL('site/validate', apiBase);
+        if (cfg.siteId) u.searchParams.set('siteId', cfg.siteId);
+        return u.toString();
+      }
+    }catch{}
+    return '';
   }
 
   // Safe HTML & highlight helpers
@@ -199,6 +208,33 @@
     refTrail.push(D.referrer); if (refTrail.length>5) refTrail.shift(); ls.set(REF_KEY, refTrail);
   }
 
+  // --- Site-key validation ---------------------------------------------------
+  function disableTrackingForInvalidSite(){
+    siteKeyOk = false;
+    state.queue.length = 0;
+  }
+  async function validateSiteKey(){
+    if (!cfg.siteId || !cfg.endpoint) { disableTrackingForInvalidSite(); return; }
+    if (siteKeyOk === true || siteKeyValidating) return;
+    const url = buildValidateUrl();
+    if (!url){ siteKeyOk = true; return; } // no validation endpoint configured → allow
+    siteKeyValidating = true;
+    try{
+      const res = await fetch(url, { method:'GET', credentials:'omit' });
+      if (res.status === 401 || res.status === 403 || res.status === 404){
+        disableTrackingForInvalidSite();
+      } else {
+        siteKeyOk = true;
+      }
+    }catch{
+      // On network/other errors, fall back to allowing tracking so embed remains resilient
+      siteKeyOk = true;
+    }finally{
+      siteKeyValidating = false;
+      if (siteKeyOk) flush();
+    }
+  }
+
   // --- Event queue + transport ----------------------------------------------
   const state = { queue: [], flushing:false };
   function baseEvent(type, payload){
@@ -217,11 +253,19 @@
   }
   function enqueue(type, payload){
     if (!readyToTrack()) return;              // silent no-op if not allowed
+    if (siteKeyOk === false) return;          // invalid site key → drop
     state.queue.push(baseEvent(type, payload));
     if (state.queue.length >= cfg.maxBatch) flush();
   }
   function flush(){
-    if (!readyToTrack() || state.flushing || !state.queue.length) return;
+    if (!state.queue.length) return;
+    if (!readyToTrack()) return;
+    if (siteKeyOk === false) return;
+    if (siteKeyOk === null){
+      validateSiteKey();
+      return;
+    }
+    if (state.flushing) return;
     state.flushing = true;
     const batch = state.queue.splice(0, state.queue.length);
     const body = JSON.stringify({ events: batch });
@@ -279,7 +323,7 @@
   // SPA hook: detect history navigation and treat as a pageview
   function hookSPA(){
     const _push = history.pushState, _replace = history.replaceState;
-    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); try{ if (cfg.messages?.enabled) pollActiveMessages() }catch{} }
+    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); }
     history.pushState = function(){ _push.apply(this, arguments); onChange() };
     history.replaceState = function(){ _replace.apply(this, arguments); onChange() };
     W.addEventListener('popstate', onChange);
@@ -306,96 +350,6 @@
         po2.observe({ type:'paint', buffered:true });
       } catch{}
     }
-  }
-
-  // --- Campaign messages (MVP) ----------------------------------------------
-  const shownCampaigns = new Set();
-  function injectCampaignStyle(){
-    if (D.getElementById('cc-campaign-style')) return;
-    const s = D.createElement('style'); s.id='cc-campaign-style'; s.textContent = `
-      .cc-cmp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:saturate(180%) blur(4px);z-index:2147483600;display:flex;align-items:center;justify-content:center}
-      .cc-cmp-modal{width:min(520px,92vw);background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee;font:500 14px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
-      .cc-cmp-hd{padding:14px 16px;font-weight:700;border-bottom:1px solid #f1f1f1}
-      .cc-cmp-bd{padding:14px 16px;color:#374151}
-      .cc-cmp-ft{display:flex;gap:10px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #f1f1f1}
-      .cc-cmp-btn{border:1px solid #ddd;border-radius:10px;padding:8px 12px;background:#fff;cursor:pointer}
-      .cc-cmp-btn.cta{background:#111;color:#fff;border-color:#111}
-      .cc-cmp-toast{position:fixed;right:16px;bottom:16px;z-index:2147483600;background:#111;color:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-    `; D.head.appendChild(s);
-  }
-  async function pollActiveMessages(){
-    try {
-      if (!cfg.messages?.enabled) return;
-      if (!cfg.messages?.endpoint || !cfg.messages?.base) return;
-      const ctx = currentCtx();
-      if (!ctx.siteId) return;
-      const params = new URLSearchParams();
-      params.append('siteId', ctx.siteId);
-      params.append('vid', ctx.vid);
-      params.append('sid', ctx.sid);
-      params.append('path', ctx.path);
-      const url = `${cfg.messages.endpoint}?${params.toString()}`;
-      const res = await fetch(url, { credentials: 'omit' });
-      const json = await res.json();
-      const msgs = Array.isArray(json.data) ? json.data : [];
-      for (const m of msgs){ if (!shownCampaigns.has(m.campaignId)) showMessage(m) }
-    } catch {}
-  }
-  async function postImpression(id){
-    try{
-      const ctx = currentCtx();
-      if (!ctx.siteId) return; // avoid 400s when siteId missing
-      const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
-      const url = `${cfg.messages.base}/${id}/impression?${params.toString()}`;
-      try { console.log('[CC embed] impression request', { id, url, ctx }); } catch {}
-      const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(ctx), credentials:'omit' });
-      try {
-        let json=null; try{ json = await res.clone().json() }catch{}
-        console.log('[CC embed] impression response', { status: res.status, ok: res.ok, json });
-      } catch {}
-    }catch{}
-  }
-  async function postInteraction(id, payload){
-    try{
-      const ctx = currentCtx();
-      if (!ctx.siteId) return;
-      const body = Object.assign({}, ctx, payload||{});
-      const params = new URLSearchParams({ siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path });
-      const url = `${cfg.messages.base}/${id}/interaction?${params.toString()}`;
-      try { console.log('[CC embed] interaction request', { id, url, body }); } catch {}
-      const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'omit' });
-      try {
-        let json=null; try{ json = await res.clone().json() }catch{}
-        console.log('[CC embed] interaction response', { status: res.status, ok: res.ok, json });
-      } catch {}
-    }catch{}
-  }
-  function showMessage(m){
-    injectCampaignStyle(); shownCampaigns.add(m.campaignId);
-    const d = m.delivery || {}; const layout = d.layout || 'modal';
-    if (layout === 'toast') return showToast(m);
-    const ov = D.createElement('div'); ov.className='cc-cmp-overlay';
-    const wrap = D.createElement('div'); wrap.className='cc-cmp-modal';
-    const hd = D.createElement('div'); hd.className='cc-cmp-hd'; hd.textContent = String(d.title || '');
-    const bd = D.createElement('div'); bd.className='cc-cmp-bd'; bd.textContent = String(d.body || '');
-    const ft = D.createElement('div'); ft.className='cc-cmp-ft';
-    const closeBtn = D.createElement('button'); closeBtn.className='cc-cmp-btn'; closeBtn.textContent='Close';
-    closeBtn.addEventListener('click', ()=>{ ov.remove(); postInteraction(m.campaignId, { action:'dismiss' }) });
-    ft.appendChild(closeBtn);
-    if (d.cta?.label && d.cta?.href){
-      const cta = D.createElement('a'); cta.className='cc-cmp-btn cta'; cta.textContent=String(d.cta.label); cta.href=String(d.cta.href); cta.target='_top';
-      cta.addEventListener('click', ()=> postInteraction(m.campaignId, { action:'click', href:String(d.cta.href) }));
-      ft.appendChild(cta);
-    }
-    wrap.appendChild(hd); wrap.appendChild(bd); wrap.appendChild(ft);
-    ov.appendChild(wrap); D.body.appendChild(ov);
-    postImpression(m.campaignId);
-  }
-  function showToast(m){
-    injectCampaignStyle(); const d = m.delivery || {};
-    const t = D.createElement('div'); t.className='cc-cmp-toast'; t.textContent = `${d.title ? d.title + ': ' : ''}${d.body || ''}`;
-    D.body.appendChild(t); postImpression(m.campaignId);
-    setTimeout(()=>{ t.remove() }, 6000);
   }
 
   // --- Search widget ---------------------------------------------------------
