@@ -51,6 +51,7 @@
   const cdnFallbackBase = 'https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/';
   const assetBase = scriptBase || cdnFallbackBase;
   const assetUrl = (file)=> assetBase + String(file || '');
+  const COMPASS_AI_NAME = 'Compass AI';
   
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
@@ -94,7 +95,11 @@
       enabled: (cfgAttr('data-chat-enabled') || 'false') === 'true',
       placeholder: cfgAttr('data-chat-placeholder') || 'Ask about this website…',
       accent: cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699',
-      title: cfgAttr('data-chat-title') || W.CC_EMBED_OPTS?.chat?.title || 'Ask Website AI',
+      name: cfgAttr('data-chat-name') || W.CC_EMBED_OPTS?.chat?.name || COMPASS_AI_NAME,
+      title: cfgAttr('data-chat-title') || W.CC_EMBED_OPTS?.chat?.title || `Ask ${COMPASS_AI_NAME}`,
+      launcherLabel: cfgAttr('data-chat-label') || W.CC_EMBED_OPTS?.chat?.launcherLabel || `Ask ${COMPASS_AI_NAME}`,
+      logoLight: cfgAttr('data-chat-logo-light') || W.CC_EMBED_OPTS?.chat?.logoLight || cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
+      logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
 
     // Behavior
@@ -387,6 +392,8 @@
     return `
   .cc-chat-btn{position:fixed;right:16px;bottom:72px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
   .cc-chat-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
+  .cc-chat-logo-wrap{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
+  .cc-chat-logo{width:18px;height:18px;display:block}
   .cc-chat-dot{width:8px;height:8px;border-radius:999px;background:${escapeHTML(cfg.chat?.accent || '#336699')};display:inline-block}
   .cc-chat-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(4px);z-index:2147483002;display:flex;align-items:flex-end;justify-content:flex-end;padding:20px}
   .cc-chat-panel{width:min(420px,95vw);height:min(620px,85vh);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee;display:flex;flex-direction:column}
@@ -648,13 +655,21 @@
       const panel = D.createElement('div'); panel.className = 'cc-chat-panel';
       const head = D.createElement('div'); head.className = 'cc-chat-head';
       const title = D.createElement('div'); title.className = 'cc-chat-title';
-      title.innerHTML = `<span class="cc-chat-dot"></span>${escapeHTML(cfg.chat.title)}`;
+      title.innerHTML = `
+        <span class="cc-chat-logo-wrap"><img class="cc-chat-logo" alt="${escapeHTML(cfg.chat.name || COMPASS_AI_NAME)}"></span>
+        ${escapeHTML(cfg.chat.title)}
+      `;
+      const titleLogo = title.querySelector('.cc-chat-logo');
+      try{
+        const src = isDarkMode() ? (cfg.chat.logoDark || cfg.chat.logoLight) : cfg.chat.logoLight;
+        if (titleLogo && src) titleLogo.src = src;
+      }catch{}
       const closeBtn = D.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'cc-chat-close'; closeBtn.setAttribute('aria-label', 'Close chat'); closeBtn.textContent = '×';
       closeBtn.addEventListener('click', close);
       head.appendChild(title); head.appendChild(closeBtn);
 
       body = D.createElement('div'); body.className = 'cc-chat-body';
-      appendMessage('ai', 'Ask anything about this website. I will answer from available page and blog content.');
+      appendMessage('ai', `Ask anything about this website. ${cfg.chat.name || COMPASS_AI_NAME} will answer from available page and blog content.`);
 
       const inputRow = D.createElement('div'); inputRow.className = 'cc-chat-input-row';
       input = D.createElement('input'); input.className = 'cc-chat-input'; input.placeholder = cfg.chat.placeholder;
@@ -681,7 +696,26 @@
     }
 
     const btn = D.createElement('button'); btn.type = 'button'; btn.className = 'cc-chat-btn';
-    btn.innerHTML = `<span class="cc-chat-dot"></span><span>Ask AI</span>`;
+    const logoWrap = D.createElement('span'); logoWrap.className = 'cc-chat-logo-wrap';
+    const logoImg = D.createElement('img'); logoImg.className = 'cc-chat-logo'; logoImg.alt = cfg.chat.name || COMPASS_AI_NAME;
+    function updateChatLogo(){
+      try{
+        const dark = isDarkMode();
+        const src = dark ? (cfg.chat.logoDark || cfg.chat.logoLight) : cfg.chat.logoLight;
+        if (src) logoImg.src = src;
+      }catch{}
+    }
+    updateChatLogo();
+    if (darkMql){
+      try{
+        if (darkMql.addEventListener) darkMql.addEventListener('change', updateChatLogo);
+        else if (darkMql.addListener) darkMql.addListener(updateChatLogo);
+      }catch{}
+    }
+    logoWrap.appendChild(logoImg);
+    const label = D.createElement('span'); label.textContent = cfg.chat.launcherLabel || `Ask ${COMPASS_AI_NAME}`;
+    btn.appendChild(logoWrap);
+    btn.appendChild(label);
     btn.addEventListener('click', open);
     D.body.appendChild(btn);
   }
