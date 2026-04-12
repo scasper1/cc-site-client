@@ -51,6 +51,7 @@
   const cdnFallbackBase = 'https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/';
   const assetBase = scriptBase || cdnFallbackBase;
   const assetUrl = (file)=> assetBase + String(file || '');
+  const COMPASS_AI_NAME = 'Compass AI';
   
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
@@ -88,6 +89,17 @@
       accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699', // title color
       logoLight: cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
+    },
+    chat: {
+      endpoint: cfgAttr('data-chat-endpoint') || W.CC_EMBED_OPTS?.chat?.endpoint || derive('chat'),
+      enabled: (cfgAttr('data-chat-enabled') || 'false') === 'true',
+      placeholder: cfgAttr('data-chat-placeholder') || 'Ask about this website…',
+      accent: cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699',
+      name: cfgAttr('data-chat-name') || W.CC_EMBED_OPTS?.chat?.name || COMPASS_AI_NAME,
+      title: cfgAttr('data-chat-title') || W.CC_EMBED_OPTS?.chat?.title || `Ask ${COMPASS_AI_NAME}`,
+      launcherLabel: cfgAttr('data-chat-label') || W.CC_EMBED_OPTS?.chat?.launcherLabel || `Ask ${COMPASS_AI_NAME}`,
+      logoLight: cfgAttr('data-chat-logo-light') || W.CC_EMBED_OPTS?.chat?.logoLight || cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
+      logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
 
     // Behavior
@@ -378,6 +390,27 @@
   function buildSearchStyles(){
     const hl = computeHighlightBg();
     return `
+  .cc-chat-btn{position:fixed;right:16px;bottom:72px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
+  .cc-chat-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
+  .cc-chat-logo-wrap{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
+  .cc-chat-logo{width:18px;height:18px;display:block}
+  .cc-chat-dot{width:8px;height:8px;border-radius:999px;background:${escapeHTML(cfg.chat?.accent || '#336699')};display:inline-block}
+  .cc-chat-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);backdrop-filter:saturate(180%) blur(4px);z-index:2147483002;display:flex;align-items:flex-end;justify-content:flex-end;padding:20px}
+  .cc-chat-panel{width:min(420px,95vw);height:min(620px,85vh);background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden;border:1px solid #eee;display:flex;flex-direction:column}
+  .cc-chat-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #eee;background:#f9fafb}
+  .cc-chat-title{font:600 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto;color:#111;display:flex;align-items:center;gap:8px}
+  .cc-chat-close{border:0;background:transparent;color:#6b7280;cursor:pointer;font-size:18px;line-height:1}
+  .cc-chat-body{flex:1;overflow:auto;padding:12px;background:#fff}
+  .cc-chat-msg{margin:0 0 10px;max-width:92%}
+  .cc-chat-msg-user{margin-left:auto;background:#eef2ff;border:1px solid #dbe4ff;color:#1f2937;padding:10px 12px;border-radius:12px}
+  .cc-chat-msg-ai{margin-right:auto;background:#f8fafc;border:1px solid #e5e7eb;color:#111;padding:10px 12px;border-radius:12px}
+  .cc-chat-sources{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .cc-chat-source{font-size:12px;color:#4b5563;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cc-chat-source:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')};text-decoration:underline}
+  .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
+  .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
+  .cc-chat-send{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
+  .cc-chat-send[disabled]{opacity:.6;cursor:not-allowed}
   .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
   .cc-search-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
   .cc-search-logo-wrap{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
@@ -548,6 +581,145 @@
     function trackSearchSelect(it){ enqueue('search_select', { id: it.id || null, title: it.title || it.name || null, url: it.url || it.href || null }) }
   }
 
+  function createChat(){
+    if (!cfg.chat.enabled || !cfg.chat.endpoint) return;
+    injectStyle();
+
+    let overlay = null, body = null, input = null, sendBtn = null, loading = false;
+
+    function appendMessage(kind, text, citations){
+      if (!body) return;
+      const wrap = D.createElement('div');
+      wrap.className = `cc-chat-msg ${kind === 'user' ? 'cc-chat-msg-user' : 'cc-chat-msg-ai'}`;
+      wrap.textContent = text || '';
+      if (kind === 'ai' && Array.isArray(citations) && citations.length){
+        const src = D.createElement('div');
+        src.className = 'cc-chat-sources';
+        citations.slice(0, 5).forEach((c)=>{
+          const a = D.createElement('a');
+          a.className = 'cc-chat-source';
+          a.href = c.url || c.canonicalUrl || '#';
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = c.title || c.url || 'Source';
+          a.addEventListener('click', ()=> enqueue('chat_citation_click', { title: c.title || null, url: c.url || c.canonicalUrl || null }));
+          src.appendChild(a);
+        });
+        wrap.appendChild(src);
+      }
+      body.appendChild(wrap);
+      body.scrollTop = body.scrollHeight;
+    }
+
+    function setLoading(v){
+      loading = !!v;
+      if (sendBtn) sendBtn.disabled = loading;
+      if (input) input.disabled = loading;
+    }
+
+    async function sendQuery(){
+      if (!input || loading) return;
+      const query = (input.value || '').trim();
+      if (!query) return;
+      appendMessage('user', query);
+      enqueue('chat_query', { q: query });
+      input.value = '';
+      setLoading(true);
+      try{
+        const res = await fetch(cfg.chat.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify({
+            siteId: cfg.siteId,
+            query,
+            sessionId: getSessionId(),
+          })
+        });
+        const json = await res.json().catch(()=> ({}));
+        const answer = json.answer || json.message || 'I could not find a reliable answer from this website content.';
+        const citations = Array.isArray(json.citations) ? json.citations : [];
+        appendMessage('ai', answer, citations);
+        enqueue('chat_response', { ok: res.ok, hasCitations: citations.length > 0, confidence: json.confidence ?? null });
+      }catch{
+        appendMessage('ai', 'Chat is temporarily unavailable. Please try again.');
+        enqueue('chat_response', { ok: false, error: 'request_failed' });
+      }finally{
+        setLoading(false);
+      }
+    }
+
+    function open(){
+      if (overlay) return;
+      overlay = D.createElement('div'); overlay.className = 'cc-chat-overlay';
+      const panel = D.createElement('div'); panel.className = 'cc-chat-panel';
+      const head = D.createElement('div'); head.className = 'cc-chat-head';
+      const title = D.createElement('div'); title.className = 'cc-chat-title';
+      title.innerHTML = `
+        <span class="cc-chat-logo-wrap"><img class="cc-chat-logo" alt="${escapeHTML(cfg.chat.name || COMPASS_AI_NAME)}"></span>
+        ${escapeHTML(cfg.chat.title)}
+      `;
+      const titleLogo = title.querySelector('.cc-chat-logo');
+      try{
+        const src = isDarkMode() ? (cfg.chat.logoDark || cfg.chat.logoLight) : cfg.chat.logoLight;
+        if (titleLogo && src) titleLogo.src = src;
+      }catch{}
+      const closeBtn = D.createElement('button'); closeBtn.type = 'button'; closeBtn.className = 'cc-chat-close'; closeBtn.setAttribute('aria-label', 'Close chat'); closeBtn.textContent = '×';
+      closeBtn.addEventListener('click', close);
+      head.appendChild(title); head.appendChild(closeBtn);
+
+      body = D.createElement('div'); body.className = 'cc-chat-body';
+      appendMessage('ai', `Ask anything about this website. ${cfg.chat.name || COMPASS_AI_NAME} will answer from available page and blog content.`);
+
+      const inputRow = D.createElement('div'); inputRow.className = 'cc-chat-input-row';
+      input = D.createElement('input'); input.className = 'cc-chat-input'; input.placeholder = cfg.chat.placeholder;
+      sendBtn = D.createElement('button'); sendBtn.type = 'button'; sendBtn.className = 'cc-chat-send'; sendBtn.textContent = 'Send';
+      sendBtn.addEventListener('click', sendQuery);
+      input.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') sendQuery() });
+      inputRow.appendChild(input); inputRow.appendChild(sendBtn);
+
+      panel.appendChild(head); panel.appendChild(body); panel.appendChild(inputRow);
+      overlay.appendChild(panel); D.body.appendChild(overlay);
+      overlay.addEventListener('click', (e)=>{ if (e.target === overlay) close() });
+      input.focus();
+      enqueue('chat_ui', { action: 'open' });
+    }
+
+    function close(){
+      if (!overlay) return;
+      overlay.remove();
+      overlay = null;
+      body = null;
+      input = null;
+      sendBtn = null;
+      enqueue('chat_ui', { action: 'close' });
+    }
+
+    const btn = D.createElement('button'); btn.type = 'button'; btn.className = 'cc-chat-btn';
+    const logoWrap = D.createElement('span'); logoWrap.className = 'cc-chat-logo-wrap';
+    const logoImg = D.createElement('img'); logoImg.className = 'cc-chat-logo'; logoImg.alt = cfg.chat.name || COMPASS_AI_NAME;
+    function updateChatLogo(){
+      try{
+        const dark = isDarkMode();
+        const src = dark ? (cfg.chat.logoDark || cfg.chat.logoLight) : cfg.chat.logoLight;
+        if (src) logoImg.src = src;
+      }catch{}
+    }
+    updateChatLogo();
+    if (darkMql){
+      try{
+        if (darkMql.addEventListener) darkMql.addEventListener('change', updateChatLogo);
+        else if (darkMql.addListener) darkMql.addListener(updateChatLogo);
+      }catch{}
+    }
+    logoWrap.appendChild(logoImg);
+    const label = D.createElement('span'); label.textContent = cfg.chat.launcherLabel || `Ask ${COMPASS_AI_NAME}`;
+    btn.appendChild(logoWrap);
+    btn.appendChild(label);
+    btn.addEventListener('click', open);
+    D.body.appendChild(btn);
+  }
+
   // --- Public API (small surface) --------------------------------------------
   const API = {
     track: enqueue,
@@ -583,6 +755,8 @@
 
     // Initialize search UI
     createSearch();
+    // Initialize chat UI (optional)
+    createChat();
   }
 
   if (D.readyState === 'complete' || D.readyState === 'interactive') init();
