@@ -52,6 +52,7 @@
   const assetBase = scriptBase || cdnFallbackBase;
   const assetUrl = (file)=> assetBase + String(file || '');
   const COMPASS_AI_NAME = 'Compass AI';
+  const hasAttr = (name)=> !!(scriptEl && scriptEl.hasAttribute && scriptEl.hasAttribute(name));
   
   // Normalize and derive helpers for API base → endpoints
   const normBase = (b)=>{
@@ -72,6 +73,15 @@
   const metaSiteId = (function(){
     try { return D.querySelector('meta[name="cc-verification"]')?.getAttribute('content') || '' } catch { return '' }
   })();
+  const explicitSearchEnabled = hasAttr('data-search-enabled') || typeof W.CC_EMBED_OPTS?.search?.enabled === 'boolean';
+  const explicitChatEnabled = hasAttr('data-chat-enabled') || typeof W.CC_EMBED_OPTS?.chat?.enabled === 'boolean';
+  const explicitSearchAccent = hasAttr('data-search-accent') || typeof W.CC_EMBED_OPTS?.search?.accent === 'string';
+  const explicitChatAccent = hasAttr('data-chat-accent') || typeof W.CC_EMBED_OPTS?.chat?.accent === 'string';
+  const explicitSearchPlaceholder = hasAttr('data-search-placeholder') || typeof W.CC_EMBED_OPTS?.search?.placeholder === 'string';
+  const explicitChatPlaceholder = hasAttr('data-chat-placeholder') || typeof W.CC_EMBED_OPTS?.chat?.placeholder === 'string';
+  const explicitChatTitle = hasAttr('data-chat-title') || typeof W.CC_EMBED_OPTS?.chat?.title === 'string';
+  const explicitChatLabel = hasAttr('data-chat-label') || typeof W.CC_EMBED_OPTS?.chat?.launcherLabel === 'string';
+  const explicitChatEndpoint = hasAttr('data-chat-endpoint') || typeof W.CC_EMBED_OPTS?.chat?.endpoint === 'string';
   const cfg = {
     // Core analytics + search
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
@@ -79,20 +89,22 @@
     endpoint: cfgAttr('data-endpoint') || W.CC_EMBED_OPTS?.endpoint || derive('ingest'),
     // Optional site-key validation endpoint; when provided we verify before sending data
     validateEndpoint: cfgAttr('data-site-validate-endpoint') || W.CC_EMBED_OPTS?.validateEndpoint || '',
+    // Public settings endpoint to read enabled controls from brand settings
+    configEndpoint: cfgAttr('data-site-config-endpoint') || W.CC_EMBED_OPTS?.configEndpoint || derive('site/config'),
 
     // Search widget config (endpoint is always derived from apiBase to avoid external overrides)
     search: {
       endpoint: derive('search'),
       placeholder: cfgAttr('data-search-placeholder') || 'Search…',
       hotkey: (cfgAttr('data-search-hotkey') || 'Ctrl+K').toLowerCase(),
-      enabled: (cfgAttr('data-search-enabled') || 'true') === 'true',
+      enabled: cfgAttr('data-search-enabled') != null ? cfgAttr('data-search-enabled') === 'true' : (typeof W.CC_EMBED_OPTS?.search?.enabled === 'boolean' ? !!W.CC_EMBED_OPTS?.search?.enabled : false),
       accent: cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699', // title color
       logoLight: cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
     chat: {
       endpoint: cfgAttr('data-chat-endpoint') || W.CC_EMBED_OPTS?.chat?.endpoint || derive('chat'),
-      enabled: (cfgAttr('data-chat-enabled') || 'false') === 'true',
+      enabled: cfgAttr('data-chat-enabled') != null ? cfgAttr('data-chat-enabled') === 'true' : (typeof W.CC_EMBED_OPTS?.chat?.enabled === 'boolean' ? !!W.CC_EMBED_OPTS?.chat?.enabled : false),
       placeholder: cfgAttr('data-chat-placeholder') || 'Ask about this website…',
       accent: cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699',
       name: cfgAttr('data-chat-name') || W.CC_EMBED_OPTS?.chat?.name || COMPASS_AI_NAME,
@@ -147,6 +159,31 @@
       if (darkMql) return darkMql.matches;
     } catch {}
     return false;
+  }
+
+  // Pull enabled controls from brand settings (public config API)
+  async function loadSiteUiConfig(){
+    try{
+      if (!cfg.siteId || !cfg.configEndpoint) return;
+      const u = new URL(cfg.configEndpoint, apiBase || L.href);
+      u.searchParams.set('siteId', cfg.siteId);
+      const res = await fetch(u.toString(), { method:'GET', credentials:'omit' });
+      if (!res.ok) return;
+      const json = await res.json().catch(()=>null);
+      if (!json || json.ok === false) return;
+      const s = json.search || {};
+      const c = json.chat || {};
+
+      if (!explicitSearchEnabled && typeof s.enabled === 'boolean') cfg.search.enabled = !!s.enabled;
+      if (!explicitChatEnabled && typeof c.enabled === 'boolean') cfg.chat.enabled = !!c.enabled;
+      if (!explicitSearchAccent && typeof s.accent === 'string' && s.accent.trim()) cfg.search.accent = s.accent.trim();
+      if (!explicitChatAccent && typeof c.accent === 'string' && c.accent.trim()) cfg.chat.accent = c.accent.trim();
+      if (!explicitSearchPlaceholder && typeof s.placeholder === 'string' && s.placeholder.trim()) cfg.search.placeholder = s.placeholder.trim();
+      if (!explicitChatPlaceholder && typeof c.placeholder === 'string' && c.placeholder.trim()) cfg.chat.placeholder = c.placeholder.trim();
+      if (!explicitChatTitle && typeof c.title === 'string' && c.title.trim()) cfg.chat.title = c.title.trim();
+      if (!explicitChatLabel && typeof c.launcherLabel === 'string' && c.launcherLabel.trim()) cfg.chat.launcherLabel = c.launcherLabel.trim();
+      if (!explicitChatEndpoint && typeof c.endpoint === 'string' && c.endpoint.trim()) cfg.chat.endpoint = c.endpoint.trim();
+    }catch{}
   }
 
   // Unified context for all network calls (siteId, vid, sid, path, ts)
@@ -729,8 +766,9 @@
   W.CC = W.CC || {}; W.CC.embed = API;
 
   // --- Init ------------------------------------------------------------------
-  function init(){
+  async function init(){
     if (!cfg.autoInit) return;
+    await loadSiteUiConfig();
     // Trackers can run even if analytics endpoint disabled (search still works)
     trackErrors();
     hookSPA();
