@@ -73,8 +73,6 @@
   const metaSiteId = (function(){
     try { return D.querySelector('meta[name="cc-verification"]')?.getAttribute('content') || '' } catch { return '' }
   })();
-  const explicitSearchEnabled = hasAttr('data-search-enabled') || typeof W.CC_EMBED_OPTS?.search?.enabled === 'boolean';
-  const explicitChatEnabled = hasAttr('data-chat-enabled') || typeof W.CC_EMBED_OPTS?.chat?.enabled === 'boolean';
   const explicitSearchAccent = hasAttr('data-search-accent') || typeof W.CC_EMBED_OPTS?.search?.accent === 'string';
   const explicitChatAccent = hasAttr('data-chat-accent') || typeof W.CC_EMBED_OPTS?.chat?.accent === 'string';
   const explicitSearchPlaceholder = hasAttr('data-search-placeholder') || typeof W.CC_EMBED_OPTS?.search?.placeholder === 'string';
@@ -174,8 +172,9 @@
       const s = json.search || {};
       const c = json.chat || {};
 
-      if (!explicitSearchEnabled && typeof s.enabled === 'boolean') cfg.search.enabled = !!s.enabled;
-      if (!explicitChatEnabled && typeof c.enabled === 'boolean') cfg.chat.enabled = !!c.enabled;
+      // Server-driven settings are authoritative for enable/disable flags.
+      if (typeof s.enabled === 'boolean') cfg.search.enabled = !!s.enabled;
+      if (typeof c.enabled === 'boolean') cfg.chat.enabled = !!c.enabled;
       if (!explicitSearchAccent && typeof s.accent === 'string' && s.accent.trim()) cfg.search.accent = s.accent.trim();
       if (!explicitChatAccent && typeof c.accent === 'string' && c.accent.trim()) cfg.chat.accent = c.accent.trim();
       if (!explicitSearchPlaceholder && typeof s.placeholder === 'string' && s.placeholder.trim()) cfg.search.placeholder = s.placeholder.trim();
