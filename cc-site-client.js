@@ -440,9 +440,22 @@
   .cc-chat-msg{margin:0 0 10px;max-width:92%}
   .cc-chat-msg-user{margin-left:auto;background:#eef2ff;border:1px solid #dbe4ff;color:#1f2937;padding:10px 12px;border-radius:12px}
   .cc-chat-msg-ai{margin-right:auto;background:#f8fafc;border:1px solid #e5e7eb;color:#111;padding:10px 12px;border-radius:12px}
-  .cc-chat-sources{margin-top:8px;display:flex;flex-direction:column;gap:5px}
-  .cc-chat-source{font-size:12px;color:#4b5563;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cc-chat-source:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')};text-decoration:underline}
+  .cc-chat-text{white-space:pre-wrap}
+  .cc-chat-sources{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+  .cc-chat-sources-title{font-size:11px;font-weight:600;letter-spacing:.02em;color:#6b7280;text-transform:uppercase}
+  .cc-chat-source-card{border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px;background:#fff}
+  .cc-chat-source-top{display:flex;align-items:flex-start;gap:8px}
+  .cc-chat-source-icon{width:20px;height:20px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
+  .cc-chat-source-icon[data-kind="blog"]{background:#2563eb}
+  .cc-chat-source-icon[data-kind="download"]{background:#059669}
+  .cc-chat-source-icon[data-kind="page"]{background:#6b7280}
+  .cc-chat-source-body{min-width:0;flex:1}
+  .cc-chat-source-link{font-size:13px;font-weight:600;color:#111827;text-decoration:none;display:block;line-height:1.3}
+  .cc-chat-source-link:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')};text-decoration:underline}
+  .cc-chat-source-snippet{margin-top:3px;font-size:12px;color:#4b5563;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cc-chat-source-snippet.is-expanded{display:block;-webkit-line-clamp:unset;overflow:visible}
+  .cc-chat-source-more{margin-top:4px;border:0;background:transparent;padding:0;color:${escapeHTML(cfg.chat?.accent || '#336699')};font-size:11px;font-weight:600;cursor:pointer}
+  .cc-chat-source-url{margin-top:2px;font-size:11px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
   .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
   .cc-chat-send{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
@@ -622,25 +635,100 @@
     injectStyle();
 
     let overlay = null, body = null, input = null, sendBtn = null, loading = false;
+    function normalizeCitationUrl(c){
+      const raw = c?.url || c?.canonicalUrl || '';
+      if (!raw) return '';
+      try { return new URL(raw, L.href).toString() } catch { return String(raw) }
+    }
+    function classifyCitation(c){
+      const kind = String(c?.sourceKind || '').toLowerCase();
+      if (kind === 'blog' || kind === 'download' || kind === 'page') return kind;
+      const sourceType = String(c?.sourceType || '').toLowerCase();
+      if (sourceType.includes('blog')) return 'blog';
+      const url = String(c?.url || c?.canonicalUrl || '').toLowerCase();
+      if (/\/blog(s)?\//.test(url)) return 'blog';
+      if (/\/lead-magnets\//.test(url) || /\.(pdf|ppt|pptx|doc|docx|xls|xlsx|zip)(\?|$)/.test(url)) return 'download';
+      return 'page';
+    }
+    function sourceGlyph(kind){
+      if (kind === 'blog') return 'B';
+      if (kind === 'download') return 'DL';
+      return 'P';
+    }
+    function renderCitation(c){
+      const card = D.createElement('div');
+      card.className = 'cc-chat-source-card';
+
+      const top = D.createElement('div');
+      top.className = 'cc-chat-source-top';
+
+      const kind = classifyCitation(c);
+      const icon = D.createElement('span');
+      icon.className = 'cc-chat-source-icon';
+      icon.setAttribute('data-kind', kind);
+      icon.textContent = sourceGlyph(kind);
+      top.appendChild(icon);
+
+      const bodyWrap = D.createElement('div');
+      bodyWrap.className = 'cc-chat-source-body';
+
+      const href = normalizeCitationUrl(c);
+      const link = D.createElement('a');
+      link.className = 'cc-chat-source-link';
+      link.href = href || '#';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = c?.title || href || 'Source';
+      link.addEventListener('click', ()=> enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind }));
+      bodyWrap.appendChild(link);
+
+      const snippet = String(c?.snippet || '').trim();
+      if (snippet){
+        const desc = D.createElement('div');
+        desc.className = 'cc-chat-source-snippet';
+        desc.textContent = snippet;
+        bodyWrap.appendChild(desc);
+        if (snippet.length > 170){
+          const more = D.createElement('button');
+          more.type = 'button';
+          more.className = 'cc-chat-source-more';
+          more.textContent = 'Read more';
+          more.addEventListener('click', ()=>{
+            const expanded = desc.classList.toggle('is-expanded');
+            more.textContent = expanded ? 'Show less' : 'Read more';
+          });
+          bodyWrap.appendChild(more);
+        }
+      }
+
+      if (href){
+        const urlLine = D.createElement('div');
+        urlLine.className = 'cc-chat-source-url';
+        urlLine.textContent = href;
+        bodyWrap.appendChild(urlLine);
+      }
+
+      top.appendChild(bodyWrap);
+      card.appendChild(top);
+      return card;
+    }
 
     function appendMessage(kind, text, citations){
       if (!body) return;
       const wrap = D.createElement('div');
       wrap.className = `cc-chat-msg ${kind === 'user' ? 'cc-chat-msg-user' : 'cc-chat-msg-ai'}`;
-      wrap.textContent = text || '';
+      const textNode = D.createElement('div');
+      textNode.className = 'cc-chat-text';
+      textNode.textContent = text || '';
+      wrap.appendChild(textNode);
       if (kind === 'ai' && Array.isArray(citations) && citations.length){
         const src = D.createElement('div');
         src.className = 'cc-chat-sources';
-        citations.slice(0, 5).forEach((c)=>{
-          const a = D.createElement('a');
-          a.className = 'cc-chat-source';
-          a.href = c.url || c.canonicalUrl || '#';
-          a.target = '_blank';
-          a.rel = 'noopener noreferrer';
-          a.textContent = c.title || c.url || 'Source';
-          a.addEventListener('click', ()=> enqueue('chat_citation_click', { title: c.title || null, url: c.url || c.canonicalUrl || null }));
-          src.appendChild(a);
-        });
+        const label = D.createElement('div');
+        label.className = 'cc-chat-sources-title';
+        label.textContent = 'Sources';
+        src.appendChild(label);
+        citations.slice(0, 5).forEach((c)=> src.appendChild(renderCitation(c)));
         wrap.appendChild(src);
       }
       body.appendChild(wrap);
@@ -673,6 +761,16 @@
           })
         });
         const json = await res.json().catch(()=> ({}));
+        if (!res.ok && json?.error === 'chat_daily_limit_reached'){
+          const retryAfter = Number(json?.retryAfter || 0);
+          const hours = retryAfter > 0 ? Math.max(1, Math.ceil(retryAfter / 3600)) : null;
+          const msg = hours
+            ? `Daily chat limit reached for this website. Please try again in about ${hours} hour${hours > 1 ? 's' : ''}.`
+            : 'Daily chat limit reached for this website. Please try again tomorrow.';
+          appendMessage('ai', msg, []);
+          enqueue('chat_response', { ok: false, error: 'chat_daily_limit_reached', retryAfter });
+          return;
+        }
         const answer = json.answer || json.message || 'I could not find a reliable answer from this website content.';
         const citations = Array.isArray(json.citations) ? json.citations : [];
         appendMessage('ai', answer, citations);
