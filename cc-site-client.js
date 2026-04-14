@@ -761,6 +761,16 @@
           })
         });
         const json = await res.json().catch(()=> ({}));
+        if (!res.ok && json?.error === 'chat_daily_limit_reached'){
+          const retryAfter = Number(json?.retryAfter || 0);
+          const hours = retryAfter > 0 ? Math.max(1, Math.ceil(retryAfter / 3600)) : null;
+          const msg = hours
+            ? `Daily chat limit reached for this website. Please try again in about ${hours} hour${hours > 1 ? 's' : ''}.`
+            : 'Daily chat limit reached for this website. Please try again tomorrow.';
+          appendMessage('ai', msg, []);
+          enqueue('chat_response', { ok: false, error: 'chat_daily_limit_reached', retryAfter });
+          return;
+        }
         const answer = json.answer || json.message || 'I could not find a reliable answer from this website content.';
         const citations = Array.isArray(json.citations) ? json.citations : [];
         appendMessage('ai', answer, citations);
