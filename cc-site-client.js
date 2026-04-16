@@ -635,10 +635,65 @@
     injectStyle();
 
     let overlay = null, body = null, input = null, sendBtn = null, loading = false;
+    const CLAIM_ENDPOINT = derive('chat/lead-magnets/claim');
+    const CHAT_EMAIL_KEY = 'cc_compass_chat_email';
     function normalizeCitationUrl(c){
       const raw = c?.url || c?.canonicalUrl || '';
       if (!raw) return '';
       try { return new URL(raw, L.href).toString() } catch { return String(raw) }
+    }
+    function isValidEmail(email){
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+    }
+    function parseLeadMagnetId(c, href){
+      const direct = String(c?.leadMagnetId || '').trim();
+      if (direct) return direct;
+      const m = String(href || '').match(/\/lead-magnets\/([a-fA-F0-9]{24})\/download/);
+      return m ? m[1] : '';
+    }
+    async function claimLeadMagnet(c, href){
+      const leadMagnetId = parseLeadMagnetId(c, href);
+      if (!leadMagnetId){
+        appendMessage('ai', 'This download item is missing a resource id.');
+        return null;
+      }
+      let email = String(ls.get(CHAT_EMAIL_KEY, '') || '').trim().toLowerCase();
+      if (!isValidEmail(email)){
+        const entered = W.prompt('Enter your email to receive this resource:') || '';
+        email = String(entered).trim().toLowerCase();
+      }
+      if (!isValidEmail(email)){
+        appendMessage('ai', 'Please enter a valid email to access this download.');
+        return null;
+      }
+      if (!CLAIM_ENDPOINT){
+        appendMessage('ai', 'Download claim endpoint is not configured.');
+        return null;
+      }
+      try{
+        const res = await fetch(CLAIM_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            siteId: cfg.siteId,
+            leadMagnetId,
+            email,
+            sessionId: getSessionId(),
+          }),
+        });
+        const json = await res.json().catch(()=> ({}));
+        if (!res.ok || !json?.ok || !json?.data?.downloadUrl){
+          appendMessage('ai', 'Could not start the download right now. Please try again.');
+          return null;
+        }
+        ls.set(CHAT_EMAIL_KEY, email);
+        enqueue('chat_download_claim', { leadMagnetId, emailDomain: email.split('@')[1] || null });
+        return json.data.downloadUrl;
+      }catch{
+        appendMessage('ai', 'Could not start the download right now. Please try again.');
+        return null;
+      }
     }
     function classifyCitation(c){
       const kind = String(c?.sourceKind || '').toLowerCase();
@@ -679,7 +734,17 @@
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
       link.textContent = c?.title || href || 'Source';
-      link.addEventListener('click', ()=> enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind }));
+      link.addEventListener('click', async (e)=>{
+        if (kind === 'download'){
+          e.preventDefault();
+          const win = W.open('about:blank', '_blank', 'noopener,noreferrer');
+          const downloadUrl = await claimLeadMagnet(c, href);
+          if (downloadUrl && win) win.location.href = downloadUrl;
+          else if (win) win.close();
+          return;
+        }
+        enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
+      });
       bodyWrap.appendChild(link);
 
       const snippet = String(c?.snippet || '').trim();
