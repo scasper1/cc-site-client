@@ -739,8 +739,15 @@
           e.preventDefault();
           const win = W.open('about:blank', '_blank', 'noopener,noreferrer');
           const downloadUrl = await claimLeadMagnet(c, href);
-          if (downloadUrl && win) win.location.href = downloadUrl;
-          else if (win) win.close();
+          if (downloadUrl){
+            enqueue('chat_citation_click', { title: c?.title || null, url: downloadUrl, sourceKind: kind });
+            // If popup is blocked, continue in the same tab.
+            if (win) win.location.href = downloadUrl;
+            else W.location.href = downloadUrl;
+            appendMessage('ai', 'Download is starting. If it does not open, please allow popups for this site and try again.');
+          } else if (win) {
+            win.close();
+          }
           return;
         }
         enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
