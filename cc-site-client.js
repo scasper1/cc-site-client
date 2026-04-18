@@ -108,6 +108,7 @@
       name: cfgAttr('data-chat-name') || W.CC_EMBED_OPTS?.chat?.name || COMPASS_AI_NAME,
       title: cfgAttr('data-chat-title') || W.CC_EMBED_OPTS?.chat?.title || `Ask ${COMPASS_AI_NAME}`,
       launcherLabel: cfgAttr('data-chat-label') || W.CC_EMBED_OPTS?.chat?.launcherLabel || `Ask ${COMPASS_AI_NAME}`,
+      minSpinnerMs: parseInt(cfgAttr('data-chat-min-spinner-ms') || W.CC_EMBED_OPTS?.chat?.minSpinnerMs || '5000', 10),
       logoLight: cfgAttr('data-chat-logo-light') || W.CC_EMBED_OPTS?.chat?.logoLight || cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
@@ -182,6 +183,7 @@
       if (!explicitChatTitle && typeof c.title === 'string' && c.title.trim()) cfg.chat.title = c.title.trim();
       if (!explicitChatLabel && typeof c.launcherLabel === 'string' && c.launcherLabel.trim()) cfg.chat.launcherLabel = c.launcherLabel.trim();
       if (!explicitChatEndpoint && typeof c.endpoint === 'string' && c.endpoint.trim()) cfg.chat.endpoint = c.endpoint.trim();
+      if (typeof c.minSpinnerMs === 'number' && Number.isFinite(c.minSpinnerMs)) cfg.chat.minSpinnerMs = c.minSpinnerMs;
     }catch{}
   }
 
@@ -451,11 +453,19 @@
   .cc-chat-source-icon[data-kind="page"]{background:#6b7280}
   .cc-chat-source-body{min-width:0;flex:1}
   .cc-chat-source-link{font-size:13px;font-weight:600;color:#111827;text-decoration:none;display:block;line-height:1.3}
-  .cc-chat-source-link:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')};text-decoration:underline}
+  .cc-chat-source-link:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')}}
   .cc-chat-source-snippet{margin-top:3px;font-size:12px;color:#4b5563;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .cc-chat-source-snippet.is-expanded{display:block;-webkit-line-clamp:unset;overflow:visible}
   .cc-chat-source-more{margin-top:4px;border:0;background:transparent;padding:0;color:${escapeHTML(cfg.chat?.accent || '#336699')};font-size:11px;font-weight:600;cursor:pointer}
   .cc-chat-source-url{margin-top:2px;font-size:11px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cc-chat-source-actions{margin-top:8px;display:flex;align-items:center;gap:8px}
+  .cc-chat-source-cta{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
+  .cc-chat-source-cta[data-variant="secondary"]{background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')}}
+  .cc-chat-msg-actions{margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .cc-chat-msg-action{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
+  .cc-chat-spinner-wrap{display:flex;align-items:center;gap:8px}
+  .cc-chat-spinner{width:14px;height:14px;border:2px solid #d1d5db;border-top-color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;animation:cc-spin .8s linear infinite}
+  @keyframes cc-spin { to { transform: rotate(360deg); } }
   .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
   .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
   .cc-chat-send{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
@@ -635,8 +645,14 @@
     injectStyle();
 
     let overlay = null, body = null, input = null, sendBtn = null, loading = false;
+    let pendingLeadCapture = null;
     const CLAIM_ENDPOINT = derive('chat/lead-magnets/claim');
-    const CHAT_EMAIL_KEY = 'cc_compass_chat_email';
+    const DEFAULT_CHAT_PLACEHOLDER = cfg.chat.placeholder || 'Ask about this website…';
+    const delay = (ms)=> new Promise((resolve)=> setTimeout(resolve, Math.max(0, Number(ms || 0))));
+    const minSpinnerMs = ()=> {
+      const raw = Number(cfg.chat?.minSpinnerMs || 5000);
+      return Math.max(5000, Number.isFinite(raw) ? Math.floor(raw) : 5000);
+    };
     function normalizeCitationUrl(c){
       const raw = c?.url || c?.canonicalUrl || '';
       if (!raw) return '';
@@ -651,17 +667,32 @@
       const m = String(href || '').match(/\/lead-magnets\/([a-fA-F0-9]{24})\/download/);
       return m ? m[1] : '';
     }
-    async function claimLeadMagnet(c, href){
+    function triggerDownloadInPlace(url){
+      const href = String(url || '').trim();
+      if (!href) return false;
+      try{
+        const a = D.createElement('a');
+        a.href = href;
+        a.setAttribute('download', '');
+        a.rel = 'noopener noreferrer';
+        a.style.display = 'none';
+        D.body.appendChild(a);
+        a.click();
+        a.remove();
+        enqueue('chat_download_triggered', { success: true });
+        return true;
+      }catch{
+        enqueue('chat_download_triggered', { success: false });
+      }
+      return false;
+    }
+    async function claimLeadMagnet(c, href, email){
       const leadMagnetId = parseLeadMagnetId(c, href);
       if (!leadMagnetId){
         appendMessage('ai', 'This download item is missing a resource id.');
         return null;
       }
-      let email = String(ls.get(CHAT_EMAIL_KEY, '') || '').trim().toLowerCase();
-      if (!isValidEmail(email)){
-        const entered = W.prompt('Enter your email to receive this resource:') || '';
-        email = String(entered).trim().toLowerCase();
-      }
+      email = String(email || '').trim().toLowerCase();
       if (!isValidEmail(email)){
         appendMessage('ai', 'Please enter a valid email to access this download.');
         return null;
@@ -687,7 +718,6 @@
           appendMessage('ai', 'Could not start the download right now. Please try again.');
           return null;
         }
-        ls.set(CHAT_EMAIL_KEY, email);
         enqueue('chat_download_claim', { leadMagnetId, emailDomain: email.split('@')[1] || null });
         return json.data.downloadUrl;
       }catch{
@@ -728,31 +758,10 @@
       bodyWrap.className = 'cc-chat-source-body';
 
       const href = normalizeCitationUrl(c);
-      const link = D.createElement('a');
-      link.className = 'cc-chat-source-link';
-      link.href = href || '#';
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = c?.title || href || 'Source';
-      link.addEventListener('click', async (e)=>{
-        if (kind === 'download'){
-          e.preventDefault();
-          const win = W.open('about:blank', '_blank', 'noopener,noreferrer');
-          const downloadUrl = await claimLeadMagnet(c, href);
-          if (downloadUrl){
-            enqueue('chat_citation_click', { title: c?.title || null, url: downloadUrl, sourceKind: kind });
-            // If popup is blocked, continue in the same tab.
-            if (win) win.location.href = downloadUrl;
-            else W.location.href = downloadUrl;
-            appendMessage('ai', 'Download is starting. If it does not open, please allow popups for this site and try again.');
-          } else if (win) {
-            win.close();
-          }
-          return;
-        }
-        enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
-      });
-      bodyWrap.appendChild(link);
+      const title = D.createElement('div');
+      title.className = 'cc-chat-source-link';
+      title.textContent = c?.title || href || 'Source';
+      bodyWrap.appendChild(title);
 
       const snippet = String(c?.snippet || '').trim();
       if (snippet){
@@ -773,7 +782,35 @@
         }
       }
 
-      if (href){
+      const actions = D.createElement('div');
+      actions.className = 'cc-chat-source-actions';
+      const ctaBtn = D.createElement('button');
+      ctaBtn.type = 'button';
+      ctaBtn.className = 'cc-chat-source-cta';
+      ctaBtn.textContent = kind === 'download' ? 'Download' : 'Open';
+      if (kind === 'download'){
+        ctaBtn.addEventListener('click', ()=>{
+          enqueue('chat_download_cta_click', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
+          pendingLeadCapture = { citation: c, href };
+          if (input){
+            input.placeholder = 'Enter your email to get this download…';
+            input.focus();
+          }
+          appendMessage('ai', 'Enter your email in this chat to receive the download.');
+          enqueue('chat_email_capture_requested', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
+        });
+      } else {
+        ctaBtn.setAttribute('data-variant', 'secondary');
+        ctaBtn.addEventListener('click', ()=>{
+          if (!href) return;
+          enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
+          W.open(href, '_blank', 'noopener,noreferrer');
+        });
+      }
+      actions.appendChild(ctaBtn);
+      bodyWrap.appendChild(actions);
+
+      if (href && kind !== 'download'){
         const urlLine = D.createElement('div');
         urlLine.className = 'cc-chat-source-url';
         urlLine.textContent = href;
@@ -785,7 +822,7 @@
       return card;
     }
 
-    function appendMessage(kind, text, citations){
+    function appendMessage(kind, text, citations, actions){
       if (!body) return;
       const wrap = D.createElement('div');
       wrap.className = `cc-chat-msg ${kind === 'user' ? 'cc-chat-msg-user' : 'cc-chat-msg-ai'}`;
@@ -793,6 +830,20 @@
       textNode.className = 'cc-chat-text';
       textNode.textContent = text || '';
       wrap.appendChild(textNode);
+      if (kind === 'ai' && Array.isArray(actions) && actions.length){
+        const actionWrap = D.createElement('div');
+        actionWrap.className = 'cc-chat-msg-actions';
+        actions.forEach((a)=>{
+          if (!a || typeof a.onClick !== 'function') return;
+          const btn = D.createElement('button');
+          btn.type = 'button';
+          btn.className = 'cc-chat-msg-action';
+          btn.textContent = a.label || 'Open';
+          btn.addEventListener('click', a.onClick);
+          actionWrap.appendChild(btn);
+        });
+        if (actionWrap.childElementCount) wrap.appendChild(actionWrap);
+      }
       if (kind === 'ai' && Array.isArray(citations) && citations.length){
         const src = D.createElement('div');
         src.className = 'cc-chat-sources';
@@ -806,6 +857,23 @@
       body.appendChild(wrap);
       body.scrollTop = body.scrollHeight;
     }
+    function appendSpinnerMessage(){
+      if (!body) return null;
+      const wrap = D.createElement('div');
+      wrap.className = 'cc-chat-msg cc-chat-msg-ai';
+      const line = D.createElement('div');
+      line.className = 'cc-chat-spinner-wrap';
+      const spinner = D.createElement('span');
+      spinner.className = 'cc-chat-spinner';
+      const txt = D.createElement('span');
+      txt.textContent = 'Thinking…';
+      line.appendChild(spinner);
+      line.appendChild(txt);
+      wrap.appendChild(line);
+      body.appendChild(wrap);
+      body.scrollTop = body.scrollHeight;
+      return wrap;
+    }
 
     function setLoading(v){
       loading = !!v;
@@ -818,10 +886,45 @@
       const query = (input.value || '').trim();
       if (!query) return;
       appendMessage('user', query);
-      enqueue('chat_query', { q: query });
       input.value = '';
+      const spinnerStartedAt = now();
+      const spinner = appendSpinnerMessage();
+      const waitMs = minSpinnerMs();
+      enqueue('chat_spinner_shown', { flow: pendingLeadCapture ? 'lead_capture' : 'chat_query', minSpinnerMs: waitMs });
       setLoading(true);
       try{
+        if (pendingLeadCapture){
+          const email = String(query || '').trim().toLowerCase();
+          if (!isValidEmail(email)){
+            enqueue('chat_email_capture_invalid', { reason: 'invalid_email_format' });
+            const remaining = waitMs - (now() - spinnerStartedAt);
+            if (remaining > 0) await delay(remaining);
+            if (spinner) spinner.remove();
+            appendMessage('ai', 'Please enter a valid email (example: name@company.com).');
+            return;
+          }
+          enqueue('chat_email_capture_submitted', { emailDomain: email.split('@')[1] || null });
+          const downloadUrl = await claimLeadMagnet(pendingLeadCapture.citation, pendingLeadCapture.href, email);
+          const remaining = waitMs - (now() - spinnerStartedAt);
+          if (remaining > 0) await delay(remaining);
+          if (spinner) spinner.remove();
+          if (!downloadUrl) return;
+          const started = triggerDownloadInPlace(downloadUrl);
+          appendMessage('ai', started ? 'Download is starting.' : 'Download is ready.', [], [
+            {
+              label: 'Download file',
+              onClick: ()=>{
+                enqueue('chat_download_fallback_click', { source: 'chat_action' });
+                triggerDownloadInPlace(downloadUrl);
+              },
+            },
+          ]);
+          pendingLeadCapture = null;
+          if (input) input.placeholder = DEFAULT_CHAT_PLACEHOLDER;
+          enqueue('chat_download_ready', { started });
+          return;
+        }
+        enqueue('chat_query', { q: query });
         const res = await fetch(cfg.chat.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -833,6 +936,9 @@
           })
         });
         const json = await res.json().catch(()=> ({}));
+        const remaining = waitMs - (now() - spinnerStartedAt);
+        if (remaining > 0) await delay(remaining);
+        if (spinner) spinner.remove();
         if (!res.ok && json?.error === 'chat_daily_limit_reached'){
           const retryAfter = Number(json?.retryAfter || 0);
           const hours = retryAfter > 0 ? Math.max(1, Math.ceil(retryAfter / 3600)) : null;
@@ -848,6 +954,9 @@
         appendMessage('ai', answer, citations);
         enqueue('chat_response', { ok: res.ok, hasCitations: citations.length > 0, confidence: json.confidence ?? null });
       }catch{
+        const remaining = waitMs - (now() - spinnerStartedAt);
+        if (remaining > 0) await delay(remaining);
+        if (spinner) spinner.remove();
         appendMessage('ai', 'Chat is temporarily unavailable. Please try again.');
         enqueue('chat_response', { ok: false, error: 'request_failed' });
       }finally{
@@ -898,6 +1007,7 @@
       body = null;
       input = null;
       sendBtn = null;
+      pendingLeadCapture = null;
       enqueue('chat_ui', { action: 'close' });
     }
 
