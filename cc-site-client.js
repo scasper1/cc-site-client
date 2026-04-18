@@ -80,6 +80,7 @@
   const explicitChatTitle = hasAttr('data-chat-title') || typeof W.CC_EMBED_OPTS?.chat?.title === 'string';
   const explicitChatLabel = hasAttr('data-chat-label') || typeof W.CC_EMBED_OPTS?.chat?.launcherLabel === 'string';
   const explicitChatEndpoint = hasAttr('data-chat-endpoint') || typeof W.CC_EMBED_OPTS?.chat?.endpoint === 'string';
+  const explicitChatShowPdfPreview = hasAttr('data-chat-show-pdf-preview') || typeof W.CC_EMBED_OPTS?.chat?.showPdfPreview === 'boolean';
   const cfg = {
     // Core analytics + search
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
@@ -109,6 +110,9 @@
       title: cfgAttr('data-chat-title') || W.CC_EMBED_OPTS?.chat?.title || `Ask ${COMPASS_AI_NAME}`,
       launcherLabel: cfgAttr('data-chat-label') || W.CC_EMBED_OPTS?.chat?.launcherLabel || `Ask ${COMPASS_AI_NAME}`,
       minSpinnerMs: parseInt(cfgAttr('data-chat-min-spinner-ms') || W.CC_EMBED_OPTS?.chat?.minSpinnerMs || '5000', 10),
+      showPdfPreview: cfgAttr('data-chat-show-pdf-preview') != null
+        ? cfgAttr('data-chat-show-pdf-preview') === 'true'
+        : (typeof W.CC_EMBED_OPTS?.chat?.showPdfPreview === 'boolean' ? !!W.CC_EMBED_OPTS?.chat?.showPdfPreview : false),
       logoLight: cfgAttr('data-chat-logo-light') || W.CC_EMBED_OPTS?.chat?.logoLight || cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
@@ -184,6 +188,7 @@
       if (!explicitChatLabel && typeof c.launcherLabel === 'string' && c.launcherLabel.trim()) cfg.chat.launcherLabel = c.launcherLabel.trim();
       if (!explicitChatEndpoint && typeof c.endpoint === 'string' && c.endpoint.trim()) cfg.chat.endpoint = c.endpoint.trim();
       if (typeof c.minSpinnerMs === 'number' && Number.isFinite(c.minSpinnerMs)) cfg.chat.minSpinnerMs = c.minSpinnerMs;
+      if (!explicitChatShowPdfPreview && typeof c.showPdfPreview === 'boolean') cfg.chat.showPdfPreview = !!c.showPdfPreview;
     }catch{}
   }
 
@@ -442,7 +447,7 @@
   .cc-chat-msg{margin:0 0 10px;max-width:92%}
   .cc-chat-msg-user{margin-left:auto;background:#eef2ff;border:1px solid #dbe4ff;color:#1f2937;padding:10px 12px;border-radius:12px}
   .cc-chat-msg-ai{margin-right:auto;background:#f8fafc;border:1px solid #e5e7eb;color:#111;padding:10px 12px;border-radius:12px}
-  .cc-chat-text{white-space:pre-wrap}
+  .cc-chat-text{white-space:pre-wrap;font-size:13px;line-height:1.4}
   .cc-chat-sources{margin-top:10px;display:flex;flex-direction:column;gap:8px}
   .cc-chat-sources-title{font-size:11px;font-weight:600;letter-spacing:.02em;color:#6b7280;text-transform:uppercase}
   .cc-chat-source-card{border:1px solid #e5e7eb;border-radius:10px;padding:8px 10px;background:#fff}
@@ -457,14 +462,20 @@
   .cc-chat-source-snippet{margin-top:3px;font-size:12px;color:#4b5563;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .cc-chat-source-snippet.is-expanded{display:block;-webkit-line-clamp:unset;overflow:visible}
   .cc-chat-source-more{margin-top:4px;border:0;background:transparent;padding:0;color:${escapeHTML(cfg.chat?.accent || '#336699')};font-size:11px;font-weight:600;cursor:pointer}
+  .cc-chat-source-preview{margin-top:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff}
+  .cc-chat-source-preview-btn{display:block;width:100%;padding:0;border:0;background:#fff;cursor:pointer;text-align:left}
+  .cc-chat-source-preview-embed{width:100%;height:96px;border:0;display:block;background:#f8fafc}
+  .cc-chat-source-preview-fallback{height:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:linear-gradient(180deg,#fff,#f8fafc);color:#334155}
+  .cc-chat-source-preview-fallback strong{font-size:11px;letter-spacing:.03em}
+  .cc-chat-source-preview-fallback span{font-size:11px;color:#64748b}
   .cc-chat-source-url{margin-top:2px;font-size:11px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cc-chat-source-actions{margin-top:8px;display:flex;align-items:center;gap:8px}
   .cc-chat-source-cta{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
   .cc-chat-source-cta[data-variant="secondary"]{background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')}}
   .cc-chat-msg-actions{margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .cc-chat-msg-action{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
-  .cc-chat-spinner-wrap{display:flex;align-items:center;gap:8px}
-  .cc-chat-spinner{width:14px;height:14px;border:2px solid #d1d5db;border-top-color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;animation:cc-spin .8s linear infinite}
+  .cc-chat-spinner-wrap{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.2}
+  .cc-chat-spinner{width:12px;height:12px;border:2px solid #d1d5db;border-top-color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;animation:cc-spin .8s linear infinite}
   @keyframes cc-spin { to { transform: rotate(360deg); } }
   .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
   .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
@@ -667,24 +678,33 @@
       const m = String(href || '').match(/\/lead-magnets\/([a-fA-F0-9]{24})\/download/);
       return m ? m[1] : '';
     }
-    function triggerDownloadInPlace(url){
+    function triggerDownloadInNewTab(url){
       const href = String(url || '').trim();
       if (!href) return false;
+      let openedInNewTab = false;
       try{
         const a = D.createElement('a');
         a.href = href;
-        a.setAttribute('download', '');
+        a.target = '_blank';
         a.rel = 'noopener noreferrer';
+        a.setAttribute('download', '');
         a.style.display = 'none';
         D.body.appendChild(a);
         a.click();
         a.remove();
-        enqueue('chat_download_triggered', { success: true });
-        return true;
-      }catch{
-        enqueue('chat_download_triggered', { success: false });
+        openedInNewTab = true;
+      }catch{}
+      if (!openedInNewTab){
+        try{
+          const win = W.open(href, '_blank', 'noopener,noreferrer');
+          openedInNewTab = !!win;
+        }catch{}
       }
-      return false;
+      if (!openedInNewTab){
+        try { W.location.href = href } catch {}
+      }
+      enqueue('chat_download_triggered', { success: true, openedInNewTab, sameTabFallback: !openedInNewTab });
+      return openedInNewTab;
     }
     async function claimLeadMagnet(c, href, email){
       const leadMagnetId = parseLeadMagnetId(c, href);
@@ -740,6 +760,29 @@
       if (kind === 'download') return 'DL';
       return 'P';
     }
+    function isPdfCitation(c, href, kind){
+      if (kind !== 'download') return false;
+      const lmType = String(c?.leadMagnetType || '').toLowerCase();
+      if (lmType === 'pdf') return true;
+      if (/\.pdf(\?|$)/i.test(String(href || ''))) return true;
+      const text = `${c?.title || ''} ${c?.snippet || ''}`.toLowerCase();
+      return /\bpdf\b/.test(text);
+    }
+    function openCitationInNewTab(c, href, kind){
+      if (!href) return;
+      enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
+      W.open(href, '_blank', 'noopener,noreferrer');
+    }
+    function startLeadCapture(c, href){
+      enqueue('chat_download_cta_click', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
+      pendingLeadCapture = { citation: c, href };
+      if (input){
+        input.placeholder = 'Enter your email to get this download…';
+        input.focus();
+      }
+      appendMessage('ai', 'Enter your email in this chat to receive the download.');
+      enqueue('chat_email_capture_requested', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
+    }
     function renderCitation(c){
       const card = D.createElement('div');
       card.className = 'cc-chat-source-card';
@@ -782,6 +825,36 @@
         }
       }
 
+      const shouldRenderPdfPreview = !!cfg.chat?.showPdfPreview && isPdfCitation(c, href, kind);
+      if (shouldRenderPdfPreview){
+        const previewWrap = D.createElement('div');
+        previewWrap.className = 'cc-chat-source-preview';
+        const previewBtn = D.createElement('button');
+        previewBtn.type = 'button';
+        previewBtn.className = 'cc-chat-source-preview-btn';
+        previewBtn.setAttribute('aria-label', 'Open PDF preview');
+        previewBtn.addEventListener('click', ()=>{
+          enqueue('chat_pdf_preview_click', { sourceKind: kind, title: c?.title || null });
+          if (kind === 'download') startLeadCapture(c, href);
+          else openCitationInNewTab(c, href, kind);
+        });
+        if (/\.pdf(\?|$)/i.test(String(href || ''))){
+          const frame = D.createElement('iframe');
+          frame.className = 'cc-chat-source-preview-embed';
+          frame.loading = 'lazy';
+          frame.setAttribute('title', c?.title || 'PDF preview');
+          frame.src = `${href}${href.includes('#') ? '' : '#page=1&toolbar=0&navpanes=0&scrollbar=0'}`;
+          previewBtn.appendChild(frame);
+        } else {
+          const fallback = D.createElement('div');
+          fallback.className = 'cc-chat-source-preview-fallback';
+          fallback.innerHTML = `<strong>PDF PREVIEW</strong><span>Click to open</span>`;
+          previewBtn.appendChild(fallback);
+        }
+        previewWrap.appendChild(previewBtn);
+        bodyWrap.appendChild(previewWrap);
+      }
+
       const actions = D.createElement('div');
       actions.className = 'cc-chat-source-actions';
       const ctaBtn = D.createElement('button');
@@ -789,23 +862,10 @@
       ctaBtn.className = 'cc-chat-source-cta';
       ctaBtn.textContent = kind === 'download' ? 'Download' : 'Open';
       if (kind === 'download'){
-        ctaBtn.addEventListener('click', ()=>{
-          enqueue('chat_download_cta_click', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
-          pendingLeadCapture = { citation: c, href };
-          if (input){
-            input.placeholder = 'Enter your email to get this download…';
-            input.focus();
-          }
-          appendMessage('ai', 'Enter your email in this chat to receive the download.');
-          enqueue('chat_email_capture_requested', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
-        });
+        ctaBtn.addEventListener('click', ()=> startLeadCapture(c, href));
       } else {
         ctaBtn.setAttribute('data-variant', 'secondary');
-        ctaBtn.addEventListener('click', ()=>{
-          if (!href) return;
-          enqueue('chat_citation_click', { title: c?.title || null, url: href || null, sourceKind: kind });
-          W.open(href, '_blank', 'noopener,noreferrer');
-        });
+        ctaBtn.addEventListener('click', ()=> openCitationInNewTab(c, href, kind));
       }
       actions.appendChild(ctaBtn);
       bodyWrap.appendChild(actions);
@@ -909,19 +969,19 @@
           if (remaining > 0) await delay(remaining);
           if (spinner) spinner.remove();
           if (!downloadUrl) return;
-          const started = triggerDownloadInPlace(downloadUrl);
-          appendMessage('ai', started ? 'Download is starting.' : 'Download is ready.', [], [
+          const openedInNewTab = triggerDownloadInNewTab(downloadUrl);
+          appendMessage('ai', openedInNewTab ? 'Download is opening in a new tab.' : 'Download is ready.', [], [
             {
               label: 'Download file',
               onClick: ()=>{
                 enqueue('chat_download_fallback_click', { source: 'chat_action' });
-                triggerDownloadInPlace(downloadUrl);
+                triggerDownloadInNewTab(downloadUrl);
               },
             },
           ]);
           pendingLeadCapture = null;
           if (input) input.placeholder = DEFAULT_CHAT_PLACEHOLDER;
-          enqueue('chat_download_ready', { started });
+          enqueue('chat_download_ready', { openedInNewTab });
           return;
         }
         enqueue('chat_query', { q: query });
