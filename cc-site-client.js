@@ -425,6 +425,16 @@
     }catch{}
     return null;
   }
+  function contrastTextForColor(color){
+    const rgb = parseRgbFromColor(color);
+    if (!rgb) return '#ffffff';
+    const [r, g, b] = rgb.map((v)=>{
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    const luminance = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+    return luminance > 0.55 ? '#111111' : '#ffffff';
+  }
   function computeHighlightBg(){
     const rgb = parseRgbFromColor(cfg.search?.accent || '#336699') || [51,102,153];
     const alpha = 0.15; // 15% opacity
@@ -432,6 +442,8 @@
   }
   function buildSearchStyles(){
     const hl = computeHighlightBg();
+    const chatAccent = escapeHTML(cfg.chat?.accent || '#336699');
+    const chatAccentContrast = escapeHTML(contrastTextForColor(cfg.chat?.accent || '#336699'));
     return `
   .cc-chat-btn{position:fixed;right:16px;bottom:72px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
   .cc-chat-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
@@ -446,7 +458,8 @@
   .cc-chat-body{flex:1;overflow:auto;padding:12px;background:#fff}
   .cc-chat-msg{margin:0 0 10px;max-width:92%}
   .cc-chat-msg-user{margin-left:auto;background:#eef2ff;border:1px solid #dbe4ff;color:#1f2937;padding:10px 12px;border-radius:12px}
-  .cc-chat-msg-ai{margin-right:auto;background:#f8fafc;border:1px solid #e5e7eb;color:#111;padding:10px 12px;border-radius:12px}
+  .cc-chat-msg-ai{margin-right:auto;background:${chatAccent};border:1px solid ${chatAccent};color:${chatAccentContrast};padding:10px 12px;border-radius:12px}
+  .cc-chat-msg-ai .cc-chat-text{color:${chatAccentContrast}}
   .cc-chat-text{white-space:pre-wrap;font-size:13px;line-height:1.4}
   .cc-chat-sources{margin-top:10px;display:flex;flex-direction:column;gap:8px}
   .cc-chat-sources-title{font-size:11px;font-weight:600;letter-spacing:.02em;color:#6b7280;text-transform:uppercase}
@@ -458,10 +471,10 @@
   .cc-chat-source-icon[data-kind="page"]{background:#6b7280}
   .cc-chat-source-body{min-width:0;flex:1}
   .cc-chat-source-link{font-size:13px;font-weight:600;color:#111827;text-decoration:none;display:block;line-height:1.3}
-  .cc-chat-source-link:hover{color:${escapeHTML(cfg.chat?.accent || '#336699')}}
+  .cc-chat-source-link:hover{color:${chatAccent}}
   .cc-chat-source-snippet{margin-top:3px;font-size:12px;color:#4b5563;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .cc-chat-source-snippet.is-expanded{display:block;-webkit-line-clamp:unset;overflow:visible}
-  .cc-chat-source-more{margin-top:4px;border:0;background:transparent;padding:0;color:${escapeHTML(cfg.chat?.accent || '#336699')};font-size:11px;font-weight:600;cursor:pointer}
+  .cc-chat-source-more{margin-top:4px;border:0;background:transparent;padding:0;color:${chatAccent};font-size:11px;font-weight:600;cursor:pointer}
   .cc-chat-source-preview{margin-top:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff}
   .cc-chat-source-preview-btn{display:block;width:100%;padding:0;border:0;background:#fff;cursor:pointer;text-align:left}
   .cc-chat-source-preview-embed{width:100%;height:96px;border:0;display:block;background:#f8fafc}
@@ -470,16 +483,16 @@
   .cc-chat-source-preview-fallback span{font-size:11px;color:#64748b}
   .cc-chat-source-url{margin-top:2px;font-size:11px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cc-chat-source-actions{margin-top:8px;display:flex;align-items:center;gap:8px}
-  .cc-chat-source-cta{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
-  .cc-chat-source-cta[data-variant="secondary"]{background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')}}
+  .cc-chat-source-cta{border:1px solid ${chatAccent};background:${chatAccent};color:#fff;border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
+  .cc-chat-source-cta[data-variant="secondary"]{background:#fff;color:${chatAccent}}
   .cc-chat-msg-actions{margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .cc-chat-msg-action{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:#fff;color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
+  .cc-chat-msg-action{border:1px solid ${chatAccent};background:#fff;color:${chatAccent};border-radius:999px;padding:6px 12px;font:600 11px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer}
   .cc-chat-spinner-wrap{display:flex;align-items:center;gap:6px;font-size:12px;line-height:1.2}
-  .cc-chat-spinner{width:12px;height:12px;border:2px solid #d1d5db;border-top-color:${escapeHTML(cfg.chat?.accent || '#336699')};border-radius:999px;animation:cc-spin .8s linear infinite}
+  .cc-chat-spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,.4);border-top-color:${chatAccentContrast};border-radius:999px;animation:cc-spin .8s linear infinite}
   @keyframes cc-spin { to { transform: rotate(360deg); } }
   .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
   .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
-  .cc-chat-send{border:1px solid ${escapeHTML(cfg.chat?.accent || '#336699')};background:${escapeHTML(cfg.chat?.accent || '#336699')};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
+  .cc-chat-send{border:1px solid ${chatAccent};background:${chatAccent};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
   .cc-chat-send[disabled]{opacity:.6;cursor:not-allowed}
   .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
   .cc-search-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
