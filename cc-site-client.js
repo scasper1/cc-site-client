@@ -748,17 +748,27 @@
         });
         const json = await res.json().catch(()=> ({}));
         if ((res.status === 202 && json?.error === 'pending_activation') || json?.data?.pendingActivation){
-          appendMessage('ai', json?.message || 'Your account activation is pending. Please verify your email from inbox. Until then, download may ask for email again.');
+          appendMessage('ai', json?.message || 'Thanks for downloading this resource. Please verify your email to continue.');
           enqueue('chat_download_pending_activation', { leadMagnetId, emailDomain: email.split('@')[1] || null });
           return null;
         }
+        if ((res.status === 202 && json?.error === 'session_expired') || json?.data?.sessionExpired){
+          appendMessage('ai', json?.message || 'Session expired. Please check your email and confirm to continue download.');
+          enqueue('chat_download_session_expired', { leadMagnetId, emailDomain: email.split('@')[1] || null });
+          return null;
+        }
         if (json?.error === 'activation_email_send_failed'){
-          appendMessage('ai', json?.message || 'Could not send activation email right now. Please try again shortly.');
+          appendMessage('ai', 'Thanks for your request. We could not send the activation email right now. Please try again in a few minutes.');
           enqueue('chat_download_activation_email_failed', { leadMagnetId, emailDomain: email.split('@')[1] || null });
           return null;
         }
+        if (json?.error === 'reauth_email_send_failed'){
+          appendMessage('ai', json?.message || 'Could not send confirmation email right now. Please try again.');
+          enqueue('chat_download_reauth_email_failed', { leadMagnetId, emailDomain: email.split('@')[1] || null });
+          return null;
+        }
         if (!res.ok || !json?.ok || !json?.data?.downloadUrl){
-          appendMessage('ai', 'Could not start the download right now. Please try again.');
+          appendMessage('ai', json?.message || 'Could not start the download right now. Please try again.');
           return null;
         }
         enqueue('chat_download_claim', { leadMagnetId, emailDomain: email.split('@')[1] || null });
