@@ -769,10 +769,15 @@
           }),
         });
         const json = await res.json().catch(()=> ({}));
-        if ((res.status === 202 && json?.error === 'pending_activation') || json?.data?.pendingActivation){
-          appendMessage('ai', json?.message || 'Thanks for downloading this resource. Please verify your email to continue.');
+        const pendingActivation = (res.status === 202 && json?.error === 'pending_activation') || !!json?.data?.pendingActivation;
+        const hasDownloadUrl = !!json?.data?.downloadUrl;
+        if (pendingActivation){
+          appendMessage(
+            'ai',
+            json?.message || 'Thanks for downloading the resource. We have sent you an email with the file download link for your reference, along with a free account activation link.'
+          );
           enqueue('chat_download_pending_activation', { leadMagnetId, emailDomain: email.split('@')[1] || null });
-          return null;
+          if (!hasDownloadUrl) return null;
         }
         if ((res.status === 202 && json?.error === 'session_expired') || json?.data?.sessionExpired){
           appendMessage('ai', json?.message || 'Session expired. Please check your email and confirm to continue download.');
