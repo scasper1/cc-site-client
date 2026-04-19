@@ -703,6 +703,17 @@
       const href = String(url || '').trim();
       if (!href) return false;
       let openedInNewTab = false;
+      let iframeTriggered = false;
+      // Most reliable for async chat flows: trigger download via hidden iframe (avoids popup blockers).
+      try{
+        const frame = D.createElement('iframe');
+        frame.style.display = 'none';
+        frame.setAttribute('aria-hidden', 'true');
+        frame.src = href;
+        D.body.appendChild(frame);
+        iframeTriggered = true;
+        W.setTimeout(()=>{ try { frame.remove() } catch {} }, 15000);
+      }catch{}
       try{
         const a = D.createElement('a');
         a.href = href;
@@ -715,17 +726,22 @@
         a.remove();
         openedInNewTab = true;
       }catch{}
-      if (!openedInNewTab){
+      if (!openedInNewTab && !iframeTriggered){
         try{
           const win = W.open(href, '_blank', 'noopener,noreferrer');
           openedInNewTab = !!win;
         }catch{}
       }
-      if (!openedInNewTab){
+      if (!openedInNewTab && !iframeTriggered){
         try { W.location.href = href } catch {}
       }
-      enqueue('chat_download_triggered', { success: true, openedInNewTab, sameTabFallback: !openedInNewTab });
-      return openedInNewTab;
+      enqueue('chat_download_triggered', {
+        success: iframeTriggered || openedInNewTab,
+        iframeTriggered,
+        openedInNewTab,
+        sameTabFallback: !iframeTriggered && !openedInNewTab,
+      });
+      return iframeTriggered || openedInNewTab;
     }
     function focusEmailInput(){
       if (!input) return;
@@ -1031,7 +1047,7 @@
           if (spinner) spinner.remove();
           if (!downloadUrl) return;
           const openedInNewTab = triggerDownloadInNewTab(downloadUrl);
-          appendMessage('ai', openedInNewTab ? 'Download is opening in a new tab.' : 'Download is ready.', [], [
+          appendMessage('ai', openedInNewTab ? 'Your download should begin shortly.' : 'Your download is ready.', [], [
             {
               label: 'Download file',
               onClick: ()=>{
