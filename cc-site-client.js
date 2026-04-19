@@ -734,6 +734,11 @@
           }),
         });
         const json = await res.json().catch(()=> ({}));
+        if ((res.status === 202 && json?.error === 'pending_activation') || json?.data?.pendingActivation){
+          appendMessage('ai', json?.message || 'Your account activation is pending. Please verify your email from inbox. Until then, download may ask for email again.');
+          enqueue('chat_download_pending_activation', { leadMagnetId, emailDomain: email.split('@')[1] || null });
+          return null;
+        }
         if (!res.ok || !json?.ok || !json?.data?.downloadUrl){
           appendMessage('ai', 'Could not start the download right now. Please try again.');
           return null;
