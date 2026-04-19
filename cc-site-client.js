@@ -492,6 +492,13 @@
   @keyframes cc-spin { to { transform: rotate(360deg); } }
   .cc-chat-input-row{padding:10px;border-top:1px solid #eee;display:flex;gap:8px;background:#fff}
   .cc-chat-input{flex:1;border:1px solid #d1d5db;border-radius:10px;padding:10px 12px;outline:0;font:500 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto}
+  .cc-chat-input:focus{border-color:${chatAccent};box-shadow:0 0 0 3px color-mix(in srgb, ${chatAccent} 20%, white)}
+  .cc-chat-input-email-focus{border-color:${chatAccent}!important;box-shadow:0 0 0 3px color-mix(in srgb, ${chatAccent} 30%, white)!important;animation:cc-input-pulse 1.2s ease-in-out 2}
+  @keyframes cc-input-pulse {
+    0%{box-shadow:0 0 0 0 color-mix(in srgb, ${chatAccent} 35%, white)}
+    70%{box-shadow:0 0 0 8px color-mix(in srgb, ${chatAccent} 0%, transparent)}
+    100%{box-shadow:0 0 0 0 color-mix(in srgb, ${chatAccent} 0%, transparent)}
+  }
   .cc-chat-send{border:1px solid ${chatAccent};background:${chatAccent};color:#fff;border-radius:10px;padding:0 12px;cursor:pointer;font:600 13px/1 system-ui, -apple-system, Segoe UI, Roboto}
   .cc-chat-send[disabled]{opacity:.6;cursor:not-allowed}
   .cc-search-btn{position:fixed;right:16px;bottom:16px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
@@ -670,6 +677,7 @@
 
     let overlay = null, body = null, input = null, sendBtn = null, loading = false;
     let pendingLeadCapture = null;
+    let emailFocusTimer = 0;
     const CLAIM_ENDPOINT = derive('chat/lead-magnets/claim');
     const DEFAULT_CHAT_PLACEHOLDER = cfg.chat.placeholder || 'Ask about this website…';
     const delay = (ms)=> new Promise((resolve)=> setTimeout(resolve, Math.max(0, Number(ms || 0))));
@@ -718,6 +726,20 @@
       }
       enqueue('chat_download_triggered', { success: true, openedInNewTab, sameTabFallback: !openedInNewTab });
       return openedInNewTab;
+    }
+    function focusEmailInput(){
+      if (!input) return;
+      if (input.disabled){
+        W.setTimeout(focusEmailInput, 0);
+        return;
+      }
+      input.focus();
+      try { input.select() } catch {}
+      input.classList.add('cc-chat-input-email-focus');
+      if (emailFocusTimer) W.clearTimeout(emailFocusTimer);
+      emailFocusTimer = W.setTimeout(()=>{
+        if (input) input.classList.remove('cc-chat-input-email-focus');
+      }, 2600);
     }
     async function claimLeadMagnet(c, href, email){
       const leadMagnetId = parseLeadMagnetId(c, href);
@@ -811,7 +833,7 @@
       pendingLeadCapture = { citation: c, href };
       if (input){
         input.placeholder = 'Enter your email to get this download…';
-        input.focus();
+        focusEmailInput();
       }
       appendMessage('ai', 'Enter your email in this chat to receive the download.');
       enqueue('chat_email_capture_requested', { leadMagnetId: parseLeadMagnetId(c, href) || null, title: c?.title || null });
@@ -994,6 +1016,7 @@
             if (remaining > 0) await delay(remaining);
             if (spinner) spinner.remove();
             appendMessage('ai', 'Please enter a valid email (example: name@company.com).');
+            focusEmailInput();
             return;
           }
           enqueue('chat_email_capture_submitted', { emailDomain: email.split('@')[1] || null });
@@ -1013,7 +1036,10 @@
             },
           ]);
           pendingLeadCapture = null;
-          if (input) input.placeholder = DEFAULT_CHAT_PLACEHOLDER;
+          if (input){
+            input.placeholder = DEFAULT_CHAT_PLACEHOLDER;
+            input.classList.remove('cc-chat-input-email-focus');
+          }
           enqueue('chat_download_ready', { openedInNewTab });
           return;
         }
@@ -1084,6 +1110,7 @@
       sendBtn = D.createElement('button'); sendBtn.type = 'button'; sendBtn.className = 'cc-chat-send'; sendBtn.textContent = 'Send';
       sendBtn.addEventListener('click', sendQuery);
       input.addEventListener('keydown', (e)=>{ if (e.key === 'Enter') sendQuery() });
+      input.addEventListener('input', ()=> input?.classList?.remove('cc-chat-input-email-focus'));
       inputRow.appendChild(input); inputRow.appendChild(sendBtn);
 
       panel.appendChild(head); panel.appendChild(body); panel.appendChild(inputRow);
