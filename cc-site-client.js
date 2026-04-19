@@ -752,6 +752,11 @@
           enqueue('chat_download_pending_activation', { leadMagnetId, emailDomain: email.split('@')[1] || null });
           return null;
         }
+        if (json?.error === 'activation_email_send_failed'){
+          appendMessage('ai', json?.message || 'Could not send activation email right now. Please try again shortly.');
+          enqueue('chat_download_activation_email_failed', { leadMagnetId, emailDomain: email.split('@')[1] || null });
+          return null;
+        }
         if (!res.ok || !json?.ok || !json?.data?.downloadUrl){
           appendMessage('ai', 'Could not start the download right now. Please try again.');
           return null;
