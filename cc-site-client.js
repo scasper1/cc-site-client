@@ -678,6 +678,8 @@
     let overlay = null, body = null, input = null, sendBtn = null, loading = false;
     let pendingLeadCapture = null;
     let emailFocusTimer = 0;
+    let lastDownloadUrl = '';
+    let lastDownloadAt = 0;
     const CLAIM_ENDPOINT = derive('chat/lead-magnets/claim');
     const DEFAULT_CHAT_PLACEHOLDER = cfg.chat.placeholder || 'Ask about this website…';
     const delay = (ms)=> new Promise((resolve)=> setTimeout(resolve, Math.max(0, Number(ms || 0))));
@@ -702,6 +704,21 @@
     function triggerDownloadInNewTab(url){
       const href = String(url || '').trim();
       if (!href) return false;
+      const nowTs = Date.now();
+      // Guard against accidental duplicate triggers for the same file in a short window.
+      if (href === lastDownloadUrl && (nowTs - lastDownloadAt) < 2500){
+        enqueue('chat_download_triggered', {
+          success: true,
+          skippedDuplicate: true,
+          iframeTriggered: false,
+          openedInNewTab: false,
+          sameTabFallback: false,
+        });
+        return true;
+      }
+      lastDownloadUrl = href;
+      lastDownloadAt = nowTs;
+
       let openedInNewTab = false;
       let iframeTriggered = false;
       // Most reliable for async chat flows: trigger download via hidden iframe (avoids popup blockers).
@@ -713,18 +730,6 @@
         D.body.appendChild(frame);
         iframeTriggered = true;
         W.setTimeout(()=>{ try { frame.remove() } catch {} }, 15000);
-      }catch{}
-      try{
-        const a = D.createElement('a');
-        a.href = href;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.setAttribute('download', '');
-        a.style.display = 'none';
-        D.body.appendChild(a);
-        a.click();
-        a.remove();
-        openedInNewTab = true;
       }catch{}
       if (!openedInNewTab && !iframeTriggered){
         try{
