@@ -1051,8 +1051,7 @@
           if (remaining > 0) await delay(remaining);
           if (spinner) spinner.remove();
           if (!downloadUrl) return;
-          const openedInNewTab = triggerDownloadInNewTab(downloadUrl);
-          appendMessage('ai', openedInNewTab ? 'Your download should begin shortly.' : 'Your download is ready.', [], [
+          appendMessage('ai', 'Your download is ready. Click "Download file" below to continue.', [], [
             {
               label: 'Download file',
               onClick: ()=>{
@@ -1066,7 +1065,7 @@
             input.placeholder = DEFAULT_CHAT_PLACEHOLDER;
             input.classList.remove('cc-chat-input-email-focus');
           }
-          enqueue('chat_download_ready', { openedInNewTab });
+          enqueue('chat_download_ready', { autoDownload: false });
           return;
         }
         enqueue('chat_query', { q: query });
