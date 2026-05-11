@@ -1373,7 +1373,8 @@
     campaignSeen.add(String(campaignId));
     campaignOpen = true;
 
-    const layout = delivery.layout || 'modal';
+    const hasWizardSteps = Array.isArray(delivery.steps) && delivery.steps.length > 0;
+    const layout = hasWizardSteps ? 'wizard' : (delivery.layout || 'modal');
     const close = ()=>{
       try{ recordCampaign(campaignId, 'interaction', { interactionType:'dismiss', deliveryAttemptId: message.deliveryAttemptId }) }catch{}
       try{ root.remove() }catch{}
@@ -1381,6 +1382,7 @@
     };
     const shell = buildCampaignShell(layout, close);
     const { root, titleWrap, body } = shell;
+    const wizardState = { fields: {} };
 
     function renderStep(stepIndex){
       const steps = Array.isArray(delivery.steps) ? delivery.steps : [];
@@ -1406,9 +1408,14 @@
         back.addEventListener('click', ()=> renderStep(stepIndex - 1));
         actions.appendChild(back);
       }
-      const configuredActions = Array.isArray(step.actions) && step.actions.length ? step.actions : (Array.isArray(delivery.actions) ? delivery.actions : []);
-      const fallbackNext = stepIndex < steps.length - 1 ? [{ label:'Next', kind:'next', nextStepId: steps[stepIndex + 1]?.id }] : [];
-      [...configuredActions, ...fallbackNext].forEach((a)=>{
+      const configuredActions = Array.isArray(step.actions) && step.actions.length ? step.actions : [];
+      const shouldAddFallbackNext = stepIndex < steps.length - 1 && !configuredActions.some((a)=> {
+        const kind = String(a?.kind || '').toLowerCase();
+        return kind === 'next' || kind === 'submit' || kind === 'lead_magnet';
+      });
+      const fallbackNext = shouldAddFallbackNext ? [{ label:'Next', kind:'next', nextStepId: steps[stepIndex + 1]?.id }] : [];
+      const terminalActions = stepIndex >= steps.length - 1 && !configuredActions.length && Array.isArray(delivery.actions) ? delivery.actions : [];
+      [...configuredActions, ...fallbackNext, ...terminalActions].forEach((a)=>{
         const btn = campaignButton(a?.label || (a?.kind === 'link' ? 'Open' : 'Continue'), a?.kind === 'close' ? 'secondary' : '');
         btn.addEventListener('click', async ()=>{
           const kind = String(a?.kind || 'next').toLowerCase();
@@ -1421,6 +1428,7 @@
           if (kind === 'close') return close();
           if (kind === 'submit' || stepType === 'form') {
             const fields = readStepFields(step, body);
+            wizardState.fields = Object.assign({}, wizardState.fields, fields);
             const json = await submitCampaignForm(campaignId, step, fields, a?.leadMagnetId);
             if (!json?.success) {
               appendText(body, 'div', 'cc-campaign-error', json?.message || 'Could not submit. Please check the fields.');
@@ -1429,7 +1437,8 @@
           }
           if (kind === 'lead_magnet' || stepType === 'lead_magnet') {
             const fields = readStepFields(step, body);
-            const email = fields.email || fields.Email || '';
+            wizardState.fields = Object.assign({}, wizardState.fields, fields);
+            const email = fields.email || fields.Email || wizardState.fields.email || wizardState.fields.Email || '';
             const leadMagnetId = a?.leadMagnetId || step?.leadMagnetId || '';
             const claim = await claimCampaignLeadMagnet(leadMagnetId, email);
             if (!claim?.ok || !claim?.data?.downloadUrl) {
