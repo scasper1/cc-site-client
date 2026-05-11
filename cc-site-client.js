@@ -116,6 +116,14 @@
       logoLight: cfgAttr('data-chat-logo-light') || W.CC_EMBED_OPTS?.chat?.logoLight || cfgAttr('data-search-logo-light') || assetUrl('cc-symbol-light-bg.svg'),
       logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
+    messages: {
+      enabled: cfgAttr('data-messages-enabled') != null
+        ? cfgAttr('data-messages-enabled') === 'true'
+        : (typeof W.CC_EMBED_OPTS?.messages?.enabled === 'boolean' ? !!W.CC_EMBED_OPTS.messages.enabled : true),
+      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages'),
+      base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns'),
+      accent: cfgAttr('data-messages-accent') || W.CC_EMBED_OPTS?.messages?.accent || cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || '#336699',
+    },
 
     // Behavior
     autoInit: (cfgAttr('data-auto-init') || 'true') === 'true',
@@ -378,7 +386,7 @@
   // SPA hook: detect history navigation and treat as a pageview
   function hookSPA(){
     const _push = history.pushState, _replace = history.replaceState;
-    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); }
+    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); try{ if (cfg.messages?.enabled) setTimeout(pollActiveMessages, 350) }catch{} }
     history.pushState = function(){ _push.apply(this, arguments); onChange() };
     history.replaceState = function(){ _replace.apply(this, arguments); onChange() };
     W.addEventListener('popstate', onChange);
@@ -518,6 +526,25 @@
   .cc-search-item[aria-selected="true"]{background:#f5f7ff}
   .cc-search-empty{padding:16px 18px;color:#6b7280}
   .cc-search-item .cc-hl{ background:${hl}; border-radius:3px; padding:0 2px }
+  .cc-campaign-layer{position:fixed;z-index:2147483003;font:500 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto;color:#111}
+  .cc-campaign-scrim{position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:2147483003;display:flex;align-items:center;justify-content:center;padding:18px}
+  .cc-campaign-card{width:min(460px,94vw);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.24)}
+  .cc-campaign-card[data-layout="toast"]{position:fixed;right:18px;bottom:18px;width:min(380px,92vw)}
+  .cc-campaign-card[data-layout="banner"]{position:fixed;left:12px;right:12px;bottom:12px;width:auto;max-width:960px;margin:0 auto}
+  .cc-campaign-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 16px 0}
+  .cc-campaign-title{margin:0;font-size:17px;line-height:1.25;font-weight:700;color:#111827}
+  .cc-campaign-close{border:0;background:transparent;color:#64748b;font-size:20px;line-height:1;cursor:pointer}
+  .cc-campaign-body{padding:14px 16px 16px}
+  .cc-campaign-text{margin:0 0 12px;color:#334155;white-space:pre-wrap}
+  .cc-campaign-img{width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:12px;background:#f8fafc}
+  .cc-campaign-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .cc-campaign-btn{border:1px solid ${escapeHTML(cfg.messages?.accent || '#336699')};background:${escapeHTML(cfg.messages?.accent || '#336699')};color:#fff;border-radius:999px;padding:8px 13px;font:700 13px/1 system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer}
+  .cc-campaign-btn[data-variant="secondary"]{background:#fff;color:${escapeHTML(cfg.messages?.accent || '#336699')}}
+  .cc-campaign-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+  .cc-campaign-field label{font-size:12px;font-weight:700;color:#334155}
+  .cc-campaign-field input,.cc-campaign-field textarea{border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;font:500 14px/1.3 system-ui,-apple-system,Segoe UI,Roboto}
+  .cc-campaign-error{font-size:12px;color:#b91c1c;margin-top:8px}
+  .cc-campaign-step-count{font-size:12px;color:#64748b;margin-bottom:8px}
     `;
   }
   function injectStyle(){
@@ -1179,6 +1206,312 @@
     btn.appendChild(label);
     btn.addEventListener('click', open);
     D.body.appendChild(btn);
+  }
+
+  // --- Campaign messages -----------------------------------------------------
+  let campaignOpen = false;
+  const campaignSeen = new Set();
+
+  function campaignUrl(path){
+    const base = String(cfg.messages?.base || '').replace(/\/+$/, '');
+    const clean = String(path || '').replace(/^\/+/, '');
+    return base ? `${base}/${clean}` : '';
+  }
+  function safeHref(raw){
+    const href = String(raw || '').trim();
+    if (!href) return '';
+    try {
+      const u = new URL(href, L.href);
+      if (!/^https?:$/i.test(u.protocol)) return '';
+      return u.toString();
+    } catch { return '' }
+  }
+  function appendText(parent, tag, className, text){
+    const el = D.createElement(tag);
+    if (className) el.className = className;
+    el.textContent = String(text || '');
+    parent.appendChild(el);
+    return el;
+  }
+  function campaignCtx(){
+    const ctx = currentCtx();
+    return { siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path };
+  }
+  async function campaignPost(url, body){
+    if (!url) return null;
+    try{
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'omit',
+        body: JSON.stringify(body || {}),
+      });
+      return await res.json().catch(()=>({ ok: res.ok, success: res.ok }));
+    }catch{ return null }
+  }
+  async function recordCampaign(campaignId, kind, body){
+    const url = campaignUrl(`${encodeURIComponent(campaignId)}/${kind}`);
+    return campaignPost(url, Object.assign(campaignCtx(), body || {}));
+  }
+  async function submitCampaignForm(campaignId, step, fields, leadMagnetId){
+    return campaignPost(campaignUrl(`${encodeURIComponent(campaignId)}/submissions`), Object.assign(campaignCtx(), {
+      stepId: step?.id || '',
+      fields,
+      leadMagnetId: leadMagnetId || step?.leadMagnetId || '',
+    }));
+  }
+  async function claimCampaignLeadMagnet(leadMagnetId, email){
+    const endpoint = derive('chat/lead-magnets/claim');
+    if (!endpoint) return { ok:false, message:'Download endpoint is not configured.' };
+    try{
+      const res = await fetch(endpoint, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        credentials:'include',
+        body: JSON.stringify({ siteId: cfg.siteId, leadMagnetId, email, sessionId: getSessionId() }),
+      });
+      const json = await res.json().catch(()=>({}));
+      return Object.assign({ ok: res.ok && json?.ok !== false }, json);
+    }catch{ return { ok:false, message:'Could not start the download right now.' } }
+  }
+  function triggerCampaignDownload(url){
+    const href = safeHref(url);
+    if (!href) return;
+    try{
+      const frame = D.createElement('iframe');
+      frame.style.display = 'none';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.src = href;
+      D.body.appendChild(frame);
+      W.setTimeout(()=>{ try{ frame.remove() }catch{} }, 15000);
+    }catch{
+      try{ W.open(href, '_blank', 'noopener,noreferrer') }catch{}
+    }
+  }
+  function buildCampaignShell(layout, onClose){
+    const isModal = layout === 'modal' || layout === 'overlay' || layout === 'wizard' || layout === 'action_list';
+    const root = D.createElement('div');
+    root.className = isModal ? 'cc-campaign-scrim' : 'cc-campaign-layer';
+    const card = D.createElement('div');
+    card.className = 'cc-campaign-card';
+    card.setAttribute('role', isModal ? 'dialog' : 'status');
+    card.setAttribute('aria-live', isModal ? 'off' : 'polite');
+    card.setAttribute('data-layout', layout || 'modal');
+    const head = D.createElement('div');
+    head.className = 'cc-campaign-head';
+    const titleWrap = D.createElement('div');
+    const close = D.createElement('button');
+    close.type = 'button';
+    close.className = 'cc-campaign-close';
+    close.setAttribute('aria-label', 'Close');
+    close.textContent = '×';
+    close.addEventListener('click', onClose);
+    head.appendChild(titleWrap);
+    head.appendChild(close);
+    const body = D.createElement('div');
+    body.className = 'cc-campaign-body';
+    card.appendChild(head);
+    card.appendChild(body);
+    root.appendChild(card);
+    if (isModal) root.addEventListener('click', (e)=>{ if (e.target === root) onClose() });
+    return { root, titleWrap, body };
+  }
+  function renderCampaignImage(parent, image){
+    const src = safeHref(image?.url);
+    if (!src) return;
+    const img = D.createElement('img');
+    img.className = 'cc-campaign-img';
+    img.src = src;
+    img.alt = String(image?.alt || '');
+    img.loading = 'lazy';
+    parent.appendChild(img);
+  }
+  function readStepFields(step, container){
+    const out = {};
+    (Array.isArray(step?.fields) ? step.fields : []).forEach((f)=>{
+      const id = String(f?.id || f?.name || '').trim();
+      if (!id) return;
+      const esc = W.CSS && W.CSS.escape ? W.CSS.escape(id) : id.replace(/"/g, '\\"');
+      const el = container.querySelector(`[data-cc-field="${esc}"]`);
+      out[id] = el ? String(el.value || '').trim() : '';
+    });
+    return out;
+  }
+  function renderFields(parent, step){
+    (Array.isArray(step?.fields) ? step.fields : []).forEach((f)=>{
+      const id = String(f?.id || f?.name || '').trim();
+      if (!id) return;
+      const wrap = D.createElement('div');
+      wrap.className = 'cc-campaign-field';
+      const label = D.createElement('label');
+      label.textContent = String(f?.label || id);
+      label.htmlFor = `cc-campaign-${id}`;
+      const input = String(f?.type || '').toLowerCase() === 'textarea' ? D.createElement('textarea') : D.createElement('input');
+      input.id = `cc-campaign-${id}`;
+      input.setAttribute('data-cc-field', id);
+      if (input.tagName === 'INPUT') input.type = String(f?.type || 'text');
+      input.placeholder = String(f?.placeholder || '');
+      input.required = f?.required === true;
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      parent.appendChild(wrap);
+    });
+  }
+  function campaignButton(label, variant){
+    const btn = D.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cc-campaign-btn';
+    if (variant) btn.setAttribute('data-variant', variant);
+    btn.textContent = String(label || 'Continue');
+    return btn;
+  }
+  function renderCampaignMessage(message){
+    if (campaignOpen) return;
+    const campaignId = message?.campaignId;
+    const delivery = message?.delivery || {};
+    if (!campaignId || campaignSeen.has(String(campaignId))) return;
+    campaignSeen.add(String(campaignId));
+    campaignOpen = true;
+
+    const layout = delivery.layout || 'modal';
+    const close = ()=>{
+      try{ recordCampaign(campaignId, 'interaction', { interactionType:'dismiss', deliveryAttemptId: message.deliveryAttemptId }) }catch{}
+      try{ root.remove() }catch{}
+      campaignOpen = false;
+    };
+    const shell = buildCampaignShell(layout, close);
+    const { root, titleWrap, body } = shell;
+
+    function renderStep(stepIndex){
+      const steps = Array.isArray(delivery.steps) ? delivery.steps : [];
+      const step = steps[stepIndex] || {};
+      titleWrap.innerHTML = '';
+      body.innerHTML = '';
+      appendText(titleWrap, 'h2', 'cc-campaign-title', step.title || delivery.title || 'Message');
+      if (steps.length > 1) appendText(body, 'div', 'cc-campaign-step-count', `${stepIndex + 1} / ${steps.length}`);
+      renderCampaignImage(body, step.image || delivery.image);
+      if (step.body || delivery.body) appendText(body, 'p', 'cc-campaign-text', step.body || delivery.body);
+      const stepType = String(step.type || 'content').toLowerCase();
+      if (stepType === 'form' || stepType === 'lead_magnet') {
+        const formWrap = D.createElement('div');
+        renderFields(formWrap, stepType === 'lead_magnet' && !step.fields?.length
+          ? Object.assign({}, step, { fields: [{ id:'email', label:'Email', type:'email', required:true, placeholder:'you@example.com' }] })
+          : step);
+        body.appendChild(formWrap);
+      }
+      const actions = D.createElement('div');
+      actions.className = 'cc-campaign-actions';
+      if (stepIndex > 0) {
+        const back = campaignButton('Back', 'secondary');
+        back.addEventListener('click', ()=> renderStep(stepIndex - 1));
+        actions.appendChild(back);
+      }
+      const configuredActions = Array.isArray(step.actions) && step.actions.length ? step.actions : (Array.isArray(delivery.actions) ? delivery.actions : []);
+      const fallbackNext = stepIndex < steps.length - 1 ? [{ label:'Next', kind:'next', nextStepId: steps[stepIndex + 1]?.id }] : [];
+      [...configuredActions, ...fallbackNext].forEach((a)=>{
+        const btn = campaignButton(a?.label || (a?.kind === 'link' ? 'Open' : 'Continue'), a?.kind === 'close' ? 'secondary' : '');
+        btn.addEventListener('click', async ()=>{
+          const kind = String(a?.kind || 'next').toLowerCase();
+          await recordCampaign(campaignId, 'interaction', { interactionType: kind, actionId: a?.id || '', deliveryAttemptId: message.deliveryAttemptId });
+          if (kind === 'link' || kind === 'cta') {
+            const href = safeHref(a?.href || delivery?.cta?.href);
+            if (href) W.open(href, '_blank', 'noopener,noreferrer');
+            return;
+          }
+          if (kind === 'close') return close();
+          if (kind === 'submit' || stepType === 'form') {
+            const fields = readStepFields(step, body);
+            const json = await submitCampaignForm(campaignId, step, fields, a?.leadMagnetId);
+            if (!json?.success) {
+              appendText(body, 'div', 'cc-campaign-error', json?.message || 'Could not submit. Please check the fields.');
+              return;
+            }
+          }
+          if (kind === 'lead_magnet' || stepType === 'lead_magnet') {
+            const fields = readStepFields(step, body);
+            const email = fields.email || fields.Email || '';
+            const leadMagnetId = a?.leadMagnetId || step?.leadMagnetId || '';
+            const claim = await claimCampaignLeadMagnet(leadMagnetId, email);
+            if (!claim?.ok || !claim?.data?.downloadUrl) {
+              appendText(body, 'div', 'cc-campaign-error', claim?.message || 'Could not start the download.');
+              return;
+            }
+            triggerCampaignDownload(claim.data.downloadUrl);
+          }
+          const targetId = a?.nextStepId || '';
+          const nextIdx = targetId ? steps.findIndex((s)=> String(s?.id || '') === String(targetId)) : stepIndex + 1;
+          if (nextIdx >= 0 && nextIdx < steps.length) renderStep(nextIdx);
+          else close();
+        });
+        actions.appendChild(btn);
+      });
+      if (!actions.childElementCount) {
+        const done = campaignButton('Close', 'secondary');
+        done.addEventListener('click', close);
+        actions.appendChild(done);
+      }
+      body.appendChild(actions);
+    }
+
+    const steps = Array.isArray(delivery.steps) && delivery.steps.length ? delivery.steps : [];
+    if (layout === 'wizard' || steps.length) {
+      renderStep(0);
+    } else {
+      appendText(titleWrap, 'h2', 'cc-campaign-title', delivery.title || 'Message');
+      renderCampaignImage(body, delivery.image);
+      appendText(body, 'p', 'cc-campaign-text', delivery.body || '');
+      const actions = D.createElement('div');
+      actions.className = 'cc-campaign-actions';
+      const actionList = Array.isArray(delivery.actions) && delivery.actions.length
+        ? delivery.actions
+        : (delivery.cta?.label ? [{ label: delivery.cta.label, href: delivery.cta.href, kind: 'link' }] : []);
+      actionList.forEach((a)=>{
+        const btn = campaignButton(a?.label || 'Open');
+        btn.addEventListener('click', async ()=>{
+          const kind = String(a?.kind || 'link').toLowerCase();
+          await recordCampaign(campaignId, 'interaction', { interactionType: kind, actionId: a?.id || '', deliveryAttemptId: message.deliveryAttemptId });
+          if (kind === 'lead_magnet') {
+            body.innerHTML = '';
+            titleWrap.innerHTML = '';
+            appendText(titleWrap, 'h2', 'cc-campaign-title', a?.label || delivery.title || 'Download');
+            const leadStep = {
+              id: `lead-${a?.id || 'magnet'}`,
+              type: 'lead_magnet',
+              title: a?.label || delivery.title || 'Download',
+              body: a?.body || 'Enter your email to receive this resource.',
+              leadMagnetId: a?.leadMagnetId || '',
+              fields: [{ id:'email', label:'Email', type:'email', required:true, placeholder:'you@example.com' }],
+              actions: [{ id:'claim', label:'Download', kind:'lead_magnet', leadMagnetId: a?.leadMagnetId || '' }],
+            };
+            delivery.steps = [leadStep];
+            renderStep(0);
+            return;
+          }
+          const href = safeHref(a?.href);
+          if (href) W.open(href, '_blank', 'noopener,noreferrer');
+        });
+        actions.appendChild(btn);
+      });
+      body.appendChild(actions);
+    }
+    D.body.appendChild(root);
+    recordCampaign(campaignId, 'impression', { deliveryAttemptId: message.deliveryAttemptId });
+  }
+  async function pollActiveMessages(){
+    if (!cfg.messages?.enabled || !cfg.messages?.endpoint || !cfg.siteId || !hasConsent() || dnt) return;
+    try{
+      const u = new URL(cfg.messages.endpoint, apiBase || L.href);
+      const ctx = currentCtx();
+      u.searchParams.set('siteId', ctx.siteId);
+      u.searchParams.set('vid', ctx.vid);
+      u.searchParams.set('sid', ctx.sid);
+      u.searchParams.set('path', ctx.path);
+      const res = await fetch(u.toString(), { method:'GET', credentials:'omit' });
+      if (!res.ok) return;
+      const json = await res.json().catch(()=>null);
+      const list = Array.isArray(json?.data) ? json.data : [];
+      if (list.length) renderCampaignMessage(list[0]);
+    }catch{}
   }
 
   // --- Public API (small surface) --------------------------------------------
