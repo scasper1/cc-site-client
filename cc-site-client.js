@@ -81,6 +81,7 @@
   const explicitChatLabel = hasAttr('data-chat-label') || typeof W.CC_EMBED_OPTS?.chat?.launcherLabel === 'string';
   const explicitChatEndpoint = hasAttr('data-chat-endpoint') || typeof W.CC_EMBED_OPTS?.chat?.endpoint === 'string';
   const explicitChatShowPdfPreview = hasAttr('data-chat-show-pdf-preview') || typeof W.CC_EMBED_OPTS?.chat?.showPdfPreview === 'boolean';
+  const explicitMessagesAccent = hasAttr('data-messages-accent') || typeof W.CC_EMBED_OPTS?.messages?.accent === 'string';
   const cfg = {
     // Core analytics + search
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
@@ -117,12 +118,12 @@
       logoDark: cfgAttr('data-chat-logo-dark') || W.CC_EMBED_OPTS?.chat?.logoDark || cfgAttr('data-search-logo-dark') || assetUrl('cc-symbol-dark-bg.svg'),
     },
     messages: {
-      enabled: cfgAttr('data-messages-enabled') != null
-        ? cfgAttr('data-messages-enabled') === 'true'
+      enabled: (cfgAttr('data-messages-enabled') ?? cfgAttr('data-campaigns-enabled')) != null
+        ? (cfgAttr('data-messages-enabled') ?? cfgAttr('data-campaigns-enabled')) === 'true'
         : (typeof W.CC_EMBED_OPTS?.messages?.enabled === 'boolean' ? !!W.CC_EMBED_OPTS.messages.enabled : true),
-      endpoint: cfgAttr('data-messages-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages'),
+      endpoint: cfgAttr('data-messages-endpoint') || cfgAttr('data-campaigns-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages'),
       base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns'),
-      accent: cfgAttr('data-messages-accent') || W.CC_EMBED_OPTS?.messages?.accent || cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || '#336699',
+      accent: cfgAttr('data-messages-accent') || W.CC_EMBED_OPTS?.messages?.accent || cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699',
     },
 
     // Behavior
@@ -190,6 +191,10 @@
       if (typeof c.enabled === 'boolean') cfg.chat.enabled = !!c.enabled;
       if (!explicitSearchAccent && typeof s.accent === 'string' && s.accent.trim()) cfg.search.accent = s.accent.trim();
       if (!explicitChatAccent && typeof c.accent === 'string' && c.accent.trim()) cfg.chat.accent = c.accent.trim();
+      if (!explicitMessagesAccent) {
+        const accent = String(c.accent || s.accent || cfg.chat.accent || cfg.search.accent || '').trim();
+        if (accent) cfg.messages.accent = accent;
+      }
       if (!explicitSearchPlaceholder && typeof s.placeholder === 'string' && s.placeholder.trim()) cfg.search.placeholder = s.placeholder.trim();
       if (!explicitChatPlaceholder && typeof c.placeholder === 'string' && c.placeholder.trim()) cfg.chat.placeholder = c.placeholder.trim();
       if (!explicitChatTitle && typeof c.title === 'string' && c.title.trim()) cfg.chat.title = c.title.trim();
@@ -537,9 +542,15 @@
   .cc-campaign-body{padding:14px 16px 16px}
   .cc-campaign-text{margin:0 0 12px;color:#334155;white-space:pre-wrap}
   .cc-campaign-img{width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:12px;background:#f8fafc}
-  .cc-campaign-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-  .cc-campaign-btn{border:1px solid ${escapeHTML(cfg.messages?.accent || '#336699')};background:${escapeHTML(cfg.messages?.accent || '#336699')};color:#fff;border-radius:999px;padding:8px 13px;font:700 13px/1 system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer}
-  .cc-campaign-btn[data-variant="secondary"]{background:#fff;color:${escapeHTML(cfg.messages?.accent || '#336699')}}
+  .cc-campaign-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+  .cc-campaign-actions-stacked{display:grid;grid-template-columns:1fr;gap:8px}
+  .cc-campaign-action{border:0;background:transparent;font:700 13px/1 system-ui,-apple-system,Segoe UI,Roboto;cursor:pointer;text-decoration:none;text-align:center}
+  .cc-campaign-action-button{border:1px solid #d1d5db;background:#fff;color:#111827;border-radius:8px;padding:9px 13px;box-shadow:0 1px 2px rgba(15,23,42,.08)}
+  .cc-campaign-action-button:hover{background:#f9fafb;border-color:#9ca3af}
+  .cc-campaign-action-button-accent{border-color:${escapeHTML(cfg.messages?.accent || '#336699')};background:${escapeHTML(cfg.messages?.accent || '#336699')};color:${escapeHTML(contrastTextForColor(cfg.messages?.accent || '#336699'))}}
+  .cc-campaign-action-button-accent:hover{filter:brightness(.96)}
+  .cc-campaign-action-link{color:${escapeHTML(cfg.messages?.accent || '#336699')};padding:4px 0;text-decoration:underline;text-underline-offset:3px}
+  .cc-campaign-actions-stacked .cc-campaign-action-button{display:block;width:100%}
   .cc-campaign-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
   .cc-campaign-field label{font-size:12px;font-weight:700;color:#334155}
   .cc-campaign-field input,.cc-campaign-field textarea{border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;font:500 14px/1.3 system-ui,-apple-system,Segoe UI,Roboto}
@@ -1233,6 +1244,33 @@
     parent.appendChild(el);
     return el;
   }
+  function deliveryOption(delivery, key, fallback){
+    if (!delivery || typeof delivery !== 'object') return fallback;
+    if (delivery[key] != null) return delivery[key];
+    if (delivery.display && delivery.display[key] != null) return delivery.display[key];
+    if (delivery.actionList && delivery.actionList[key] != null) return delivery.actionList[key];
+    return fallback;
+  }
+  function campaignActionListLayout(delivery, layout){
+    const raw = deliveryOption(delivery, 'actionListLayout',
+      deliveryOption(delivery, 'actionsLayout', layout === 'action_list' ? 'stacked' : 'inline'));
+    return ['stacked', 'one_per_line'].includes(String(raw || '').toLowerCase()) ? 'stacked' : 'inline';
+  }
+  function campaignDefaultActionStyle(delivery){
+    return String(deliveryOption(delivery, 'actionStyle', 'button')).toLowerCase() === 'link' ? 'link' : 'button';
+  }
+  function campaignDefaultButtonTone(delivery){
+    return String(deliveryOption(delivery, 'actionButtonTone', 'default')).toLowerCase() === 'accent' ? 'accent' : 'default';
+  }
+  function campaignActionStyle(action, fallback){
+    return String(action?.style || action?.variant || fallback || 'button').toLowerCase() === 'link' ? 'link' : 'button';
+  }
+  function campaignButtonTone(action, fallback){
+    return String(action?.buttonTone || action?.tone || fallback || 'default').toLowerCase() === 'accent' ? 'accent' : 'default';
+  }
+  function applyCampaignActionsLayout(el, delivery, layout){
+    el.className = `cc-campaign-actions${campaignActionListLayout(delivery, layout) === 'stacked' ? ' cc-campaign-actions-stacked' : ''}`;
+  }
   function campaignCtx(){
     const ctx = currentCtx();
     return { siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path };
@@ -1357,11 +1395,13 @@
       parent.appendChild(wrap);
     });
   }
-  function campaignButton(label, variant){
+  function campaignButton(label, options){
+    const opts = typeof options === 'string' ? { variant: options } : (options || {});
+    const style = opts.style === 'link' ? 'link' : 'button';
+    const tone = opts.tone === 'accent' ? 'accent' : 'default';
     const btn = D.createElement('button');
     btn.type = 'button';
-    btn.className = 'cc-campaign-btn';
-    if (variant) btn.setAttribute('data-variant', variant);
+    btn.className = `cc-campaign-action cc-campaign-action-${style}${style === 'button' ? ' cc-campaign-action-button' : ''}${style === 'button' && tone === 'accent' ? ' cc-campaign-action-button-accent' : ''}`;
     btn.textContent = String(label || 'Continue');
     return btn;
   }
@@ -1372,6 +1412,7 @@
     if (!campaignId || campaignSeen.has(String(campaignId))) return;
     campaignSeen.add(String(campaignId));
     campaignOpen = true;
+    injectStyle();
 
     const hasWizardSteps = Array.isArray(delivery.steps) && delivery.steps.length > 0;
     const layout = hasWizardSteps ? 'wizard' : (delivery.layout || 'modal');
@@ -1402,13 +1443,15 @@
         body.appendChild(formWrap);
       }
       const actions = D.createElement('div');
-      actions.className = 'cc-campaign-actions';
+      applyCampaignActionsLayout(actions, delivery, layout);
       if (stepIndex > 0) {
         const back = campaignButton('Back', 'secondary');
         back.addEventListener('click', ()=> renderStep(stepIndex - 1));
         actions.appendChild(back);
       }
       const configuredActions = Array.isArray(step.actions) && step.actions.length ? step.actions : [];
+      const defaultActionStyle = campaignDefaultActionStyle(delivery);
+      const defaultButtonTone = campaignDefaultButtonTone(delivery);
       const shouldAddFallbackNext = stepIndex < steps.length - 1 && !configuredActions.some((a)=> {
         const kind = String(a?.kind || '').toLowerCase();
         return kind === 'next' || kind === 'submit' || kind === 'lead_magnet';
@@ -1416,7 +1459,10 @@
       const fallbackNext = shouldAddFallbackNext ? [{ label:'Next', kind:'next', nextStepId: steps[stepIndex + 1]?.id }] : [];
       const terminalActions = stepIndex >= steps.length - 1 && !configuredActions.length && Array.isArray(delivery.actions) ? delivery.actions : [];
       [...configuredActions, ...fallbackNext, ...terminalActions].forEach((a)=>{
-        const btn = campaignButton(a?.label || (a?.kind === 'link' ? 'Open' : 'Continue'), a?.kind === 'close' ? 'secondary' : '');
+        const btn = campaignButton(a?.label || (a?.kind === 'link' ? 'Open' : 'Continue'), {
+          style: campaignActionStyle(a, defaultActionStyle),
+          tone: campaignButtonTone(a, defaultButtonTone),
+        });
         btn.addEventListener('click', async ()=>{
           const kind = String(a?.kind || 'next').toLowerCase();
           await recordCampaign(campaignId, 'interaction', { interactionType: kind, actionId: a?.id || '', deliveryAttemptId: message.deliveryAttemptId });
@@ -1470,12 +1516,17 @@
       renderCampaignImage(body, delivery.image);
       appendText(body, 'p', 'cc-campaign-text', delivery.body || '');
       const actions = D.createElement('div');
-      actions.className = 'cc-campaign-actions';
+      applyCampaignActionsLayout(actions, delivery, layout);
       const actionList = Array.isArray(delivery.actions) && delivery.actions.length
         ? delivery.actions
         : (delivery.cta?.label ? [{ label: delivery.cta.label, href: delivery.cta.href, kind: 'link' }] : []);
+      const defaultActionStyle = campaignDefaultActionStyle(delivery);
+      const defaultButtonTone = campaignDefaultButtonTone(delivery);
       actionList.forEach((a)=>{
-        const btn = campaignButton(a?.label || 'Open');
+        const btn = campaignButton(a?.label || 'Open', {
+          style: campaignActionStyle(a, defaultActionStyle),
+          tone: campaignButtonTone(a, defaultButtonTone),
+        });
         btn.addEventListener('click', async ()=>{
           const kind = String(a?.kind || 'link').toLowerCase();
           await recordCampaign(campaignId, 'interaction', { interactionType: kind, actionId: a?.id || '', deliveryAttemptId: message.deliveryAttemptId });
