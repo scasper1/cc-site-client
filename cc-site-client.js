@@ -344,11 +344,13 @@
     try { ok = !!(N.sendBeacon && N.sendBeacon(cfg.endpoint, blob)) } catch {}
     if (!ok){
       fetch(cfg.endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body })
+        .then(()=> scheduleCampaignPoll(600))
         .catch(()=>{ state.queue.unshift(...batch) }) // requeue on failure
         .finally(()=>{ state.flushing=false });
       return;
     }
     state.flushing=false;
+    scheduleCampaignPoll(900);
   }
   function scheduleFlush(){ setTimeout(flush, 250) }
 
@@ -391,7 +393,7 @@
   // SPA hook: detect history navigation and treat as a pageview
   function hookSPA(){
     const _push = history.pushState, _replace = history.replaceState;
-    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); try{ if (cfg.messages?.enabled) setTimeout(pollActiveMessages, 350) }catch{} }
+    function onChange(){ touchSession(); trackPageview({ spa:true }); scheduleFlush(); scheduleCampaignPoll(900); scheduleCampaignPoll(2500) }
     history.pushState = function(){ _push.apply(this, arguments); onChange() };
     history.replaceState = function(){ _replace.apply(this, arguments); onChange() };
     W.addEventListener('popstate', onChange);
@@ -1566,6 +1568,7 @@
       u.searchParams.set('vid', ctx.vid);
       u.searchParams.set('sid', ctx.sid);
       u.searchParams.set('path', ctx.path);
+      u.searchParams.set('url', String(L.href));
       const res = await fetch(u.toString(), { method:'GET', credentials:'omit' });
       if (!res.ok) return;
       const json = await res.json().catch(()=>null);
@@ -1573,12 +1576,21 @@
       if (list.length) renderCampaignMessage(list[0]);
     }catch{}
   }
+  function scheduleCampaignPoll(delayMs){
+    try{
+      if (!cfg.messages?.enabled) return;
+      W.setTimeout(pollActiveMessages, Math.max(0, Number(delayMs || 0)));
+    }catch{}
+  }
 
   // --- Public API (small surface) --------------------------------------------
   const API = {
     track: enqueue,
     consentGranted(){ ls.set('cc_consent_granted', true) },
-    pageview: trackPageview
+    pageview: trackPageview,
+    campaigns: {
+      poll: pollActiveMessages
+    }
   };
   W.CC = W.CC || {}; W.CC.embed = API;
 
@@ -1592,7 +1604,10 @@
     perf();
     trackPageview({ spa:false });
     // After first pageview, check for active campaign messages
-    try{ if (cfg.messages?.enabled) pollActiveMessages() }catch{}
+    scheduleFlush();
+    scheduleCampaignPoll(900);
+    scheduleCampaignPoll(2500);
+    scheduleCampaignPoll(6000);
 
     // Scroll + click capture
     let scrollDebounce=0;
