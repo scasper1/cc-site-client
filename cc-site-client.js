@@ -48,7 +48,7 @@
       return i >= 0 ? scriptSrc.slice(0, i + 1) : '';
     }
   })();
-  const cdnFallbackBase = 'https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest/';
+  const cdnFallbackBase = 'https://cdn.jsdelivr.net/gh/scasper1/cc-site-client@latest';
   const assetBase = scriptBase || cdnFallbackBase;
   const assetUrl = (file)=> assetBase + String(file || '');
   const COMPASS_AI_NAME = 'Compass AI';
