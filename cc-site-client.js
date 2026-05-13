@@ -535,12 +535,14 @@
   .cc-search-item .cc-hl{ background:${hl}; border-radius:3px; padding:0 2px }
   .cc-campaign-layer{position:fixed;z-index:2147483003;font:500 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto;color:#111}
   .cc-campaign-scrim{position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:2147483003;display:flex;align-items:center;justify-content:center;padding:18px}
-  .cc-campaign-card{width:min(460px,94vw);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.24)}
-  .cc-campaign-card[data-layout="toast"]{position:fixed;right:18px;bottom:18px;width:min(380px,92vw)}
+  .cc-campaign-card{position:relative;width:min(460px,94vw);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.24)}
+  .cc-campaign-card[data-layout="toast"]{position:fixed;left:18px;bottom:18px;width:min(380px,92vw)}
   .cc-campaign-card[data-layout="banner"]{position:fixed;left:12px;right:12px;bottom:12px;width:auto;max-width:960px;margin:0 auto}
   .cc-campaign-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 16px 0}
   .cc-campaign-title{margin:0;font-size:17px;line-height:1.25;font-weight:700;color:#111827}
   .cc-campaign-close{border:0;background:transparent;color:#64748b;font-size:20px;line-height:1;cursor:pointer}
+  .cc-campaign-card[data-image="flush"] .cc-campaign-close{position:absolute;right:10px;top:10px;z-index:2;width:30px;height:30px;border-radius:999px;background:rgba(15,23,42,.58);color:#fff;display:flex;align-items:center;justify-content:center}
+  .cc-campaign-hero-img{display:block;width:100%;height:190px;object-fit:cover;background:#f8fafc}
   .cc-campaign-body{padding:14px 16px 16px}
   .cc-campaign-text{margin:0 0 12px;color:#334155;white-space:pre-wrap}
   .cc-campaign-img{width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:12px;background:#f8fafc}
@@ -1273,6 +1275,10 @@
   function applyCampaignActionsLayout(el, delivery, layout){
     el.className = `cc-campaign-actions${campaignActionListLayout(delivery, layout) === 'stacked' ? ' cc-campaign-actions-stacked' : ''}`;
   }
+  function campaignImagePlacement(image){
+    const raw = String(image?.placement || image?.display || '').toLowerCase();
+    return raw === 'flush_top' || raw === 'flush' || image?.flush === true ? 'flush' : 'contained';
+  }
   function campaignCtx(){
     const ctx = currentCtx();
     return { siteId: ctx.siteId, vid: ctx.vid, sid: ctx.sid, path: ctx.path };
@@ -1354,7 +1360,7 @@
     card.appendChild(body);
     root.appendChild(card);
     if (isModal) root.addEventListener('click', (e)=>{ if (e.target === root) onClose() });
-    return { root, titleWrap, body };
+    return { root, card, titleWrap, body };
   }
   function renderCampaignImage(parent, image){
     const src = safeHref(image?.url);
@@ -1365,6 +1371,27 @@
     img.alt = String(image?.alt || '');
     img.loading = 'lazy';
     parent.appendChild(img);
+  }
+  function clearCampaignHero(card){
+    try{
+      card.removeAttribute('data-image');
+      const hero = card.querySelector('[data-cc-campaign-hero="true"]');
+      if (hero) hero.remove();
+    }catch{}
+  }
+  function renderCampaignHero(card, image){
+    clearCampaignHero(card);
+    const src = safeHref(image?.url);
+    if (!src || campaignImagePlacement(image) !== 'flush') return false;
+    card.setAttribute('data-image', 'flush');
+    const img = D.createElement('img');
+    img.className = 'cc-campaign-hero-img';
+    img.setAttribute('data-cc-campaign-hero', 'true');
+    img.src = src;
+    img.alt = String(image?.alt || '');
+    img.loading = 'lazy';
+    card.insertBefore(img, card.firstChild);
+    return true;
   }
   function readStepFields(step, container){
     const out = {};
@@ -1424,7 +1451,7 @@
       campaignOpen = false;
     };
     const shell = buildCampaignShell(layout, close);
-    const { root, titleWrap, body } = shell;
+    const { root, card, titleWrap, body } = shell;
     const wizardState = { fields: {} };
 
     function renderStep(stepIndex){
@@ -1432,9 +1459,11 @@
       const step = steps[stepIndex] || {};
       titleWrap.innerHTML = '';
       body.innerHTML = '';
+      const heroImage = step.image || delivery.image;
+      const isHero = renderCampaignHero(card, heroImage);
       appendText(titleWrap, 'h2', 'cc-campaign-title', step.title || delivery.title || 'Message');
       if (steps.length > 1) appendText(body, 'div', 'cc-campaign-step-count', `${stepIndex + 1} / ${steps.length}`);
-      renderCampaignImage(body, step.image || delivery.image);
+      if (!isHero) renderCampaignImage(body, heroImage);
       if (step.body || delivery.body) appendText(body, 'p', 'cc-campaign-text', step.body || delivery.body);
       const stepType = String(step.type || 'content').toLowerCase();
       if (stepType === 'form' || stepType === 'lead_magnet') {
@@ -1514,8 +1543,9 @@
     if (layout === 'wizard' || steps.length) {
       renderStep(0);
     } else {
+      const isHero = renderCampaignHero(card, delivery.image);
       appendText(titleWrap, 'h2', 'cc-campaign-title', delivery.title || 'Message');
-      renderCampaignImage(body, delivery.image);
+      if (!isHero) renderCampaignImage(body, delivery.image);
       appendText(body, 'p', 'cc-campaign-text', delivery.body || '');
       const actions = D.createElement('div');
       applyCampaignActionsLayout(actions, delivery, layout);
