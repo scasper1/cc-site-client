@@ -82,6 +82,8 @@
   const explicitChatEndpoint = hasAttr('data-chat-endpoint') || typeof W.CC_EMBED_OPTS?.chat?.endpoint === 'string';
   const explicitChatShowPdfPreview = hasAttr('data-chat-show-pdf-preview') || typeof W.CC_EMBED_OPTS?.chat?.showPdfPreview === 'boolean';
   const explicitMessagesAccent = hasAttr('data-messages-accent') || typeof W.CC_EMBED_OPTS?.messages?.accent === 'string';
+  const explicitDockPosition = hasAttr('data-dock-position') || hasAttr('data-toolbar-position') || typeof W.CC_EMBED_OPTS?.dock?.position === 'string' || typeof W.CC_EMBED_OPTS?.toolbar?.position === 'string';
+  const explicitDockDensity = hasAttr('data-dock-density') || hasAttr('data-toolbar-density') || typeof W.CC_EMBED_OPTS?.dock?.density === 'string' || typeof W.CC_EMBED_OPTS?.toolbar?.density === 'string';
   const cfg = {
     // Core analytics + search
     siteId: cfgAttr('data-site-id') || W.CC_EMBED_SITE_ID || W.CC_EMBED_OPTS?.siteId || metaSiteId || '',
@@ -124,6 +126,10 @@
       endpoint: cfgAttr('data-messages-endpoint') || cfgAttr('data-campaigns-endpoint') || W.CC_EMBED_OPTS?.messages?.endpoint || derive('campaigns/active-messages'),
       base: cfgAttr('data-campaign-base') || W.CC_EMBED_OPTS?.messages?.base || derive('campaigns'),
       accent: cfgAttr('data-messages-accent') || W.CC_EMBED_OPTS?.messages?.accent || cfgAttr('data-chat-accent') || W.CC_EMBED_OPTS?.chat?.accent || cfgAttr('data-search-accent') || W.CC_EMBED_OPTS?.search?.accent || '#336699',
+    },
+    dock: {
+      position: cfgAttr('data-dock-position') || cfgAttr('data-toolbar-position') || W.CC_EMBED_OPTS?.dock?.position || W.CC_EMBED_OPTS?.toolbar?.position || 'right',
+      density: cfgAttr('data-dock-density') || cfgAttr('data-toolbar-density') || W.CC_EMBED_OPTS?.dock?.density || W.CC_EMBED_OPTS?.toolbar?.density || 'compact',
     },
 
     // Behavior
@@ -185,6 +191,7 @@
       if (!json || json.ok === false) return;
       const s = json.search || {};
       const c = json.chat || {};
+      const d = json.dock || json.toolbar || json.launcher || json.primaryToolbar || json.primary?.dock || json.primary?.toolbar || json.settings?.dock || json.settings?.toolbar || json.settings?.primaryToolbar || {};
 
       // Server-driven settings are authoritative for enable/disable flags.
       if (typeof s.enabled === 'boolean') cfg.search.enabled = !!s.enabled;
@@ -202,6 +209,8 @@
       if (!explicitChatEndpoint && typeof c.endpoint === 'string' && c.endpoint.trim()) cfg.chat.endpoint = c.endpoint.trim();
       if (typeof c.minSpinnerMs === 'number' && Number.isFinite(c.minSpinnerMs)) cfg.chat.minSpinnerMs = c.minSpinnerMs;
       if (!explicitChatShowPdfPreview && typeof c.showPdfPreview === 'boolean') cfg.chat.showPdfPreview = !!c.showPdfPreview;
+      if (!explicitDockPosition && typeof d.position === 'string' && d.position.trim()) cfg.dock.position = d.position.trim();
+      if (!explicitDockDensity && typeof d.density === 'string' && d.density.trim()) cfg.dock.density = d.density.trim();
     }catch{}
   }
 
@@ -460,6 +469,19 @@
     const chatAccent = escapeHTML(cfg.chat?.accent || '#336699');
     const chatAccentContrast = escapeHTML(contrastTextForColor(cfg.chat?.accent || '#336699'));
     return `
+  .cc-dock{position:fixed;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:7px 9px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:600 14px/1 system-ui,-apple-system,Segoe UI,Roboto;display:inline-flex;align-items:center;gap:8px;color:#111}
+  .cc-dock:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
+  .cc-dock[data-position="right"]{right:16px;bottom:16px}
+  .cc-dock[data-position="left"]{left:16px;bottom:16px}
+  .cc-dock[data-position="bottom"],.cc-dock[data-position="middle-bottom"],.cc-dock[data-position="center"],.cc-dock[data-position="center-bottom"]{left:50%;bottom:16px;transform:translateX(-50%)}
+  .cc-dock[data-density="relaxed"]{padding:9px 12px;gap:11px}
+  .cc-dock-brand{white-space:nowrap;padding-right:2px;color:#111827}
+  .cc-dock-sep{width:1px;height:22px;background:#e5e7eb}
+  .cc-dock-icon{position:relative;width:28px;height:28px;border:0;border-radius:999px;background:transparent;color:#111827;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+  .cc-dock-icon:hover{background:#f3f4f6;color:${chatAccent}}
+  .cc-dock-icon svg{width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .cc-dock-alert{position:absolute;right:3px;top:3px;width:8px;height:8px;border-radius:999px;background:${escapeHTML(cfg.messages?.accent || '#336699')};box-shadow:0 0 0 2px #fff;display:none}
+  .cc-dock-icon[data-alert="true"] .cc-dock-alert{display:block}
   .cc-chat-btn{position:fixed;right:16px;bottom:72px;z-index:2147483000;border:1px solid #ddd;border-radius:12px;padding:8px 12px;background:#fff;box-shadow:0 4px 16px rgba(0,0,0,.12);font:500 14px/1 system-ui, -apple-system, Segoe UI, Roboto;cursor:pointer;display:inline-flex;align-items:center;gap:8px;color:#111}
   .cc-chat-btn:hover{box-shadow:0 6px 20px rgba(0,0,0,.16);border-color:#d1d5db}
   .cc-chat-logo-wrap{width:22px;height:22px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
@@ -535,12 +557,14 @@
   .cc-search-item .cc-hl{ background:${hl}; border-radius:3px; padding:0 2px }
   .cc-campaign-layer{position:fixed;z-index:2147483003;font:500 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto;color:#111}
   .cc-campaign-scrim{position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:2147483003;display:flex;align-items:center;justify-content:center;padding:18px}
-  .cc-campaign-card{width:min(460px,94vw);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.24)}
-  .cc-campaign-card[data-layout="toast"]{position:fixed;right:18px;bottom:18px;width:min(380px,92vw)}
+  .cc-campaign-card{position:relative;width:min(460px,94vw);max-height:88vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 18px 46px rgba(15,23,42,.24)}
+  .cc-campaign-card[data-layout="toast"]{position:fixed;left:18px;bottom:18px;width:min(380px,92vw)}
   .cc-campaign-card[data-layout="banner"]{position:fixed;left:12px;right:12px;bottom:12px;width:auto;max-width:960px;margin:0 auto}
   .cc-campaign-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 16px 0}
   .cc-campaign-title{margin:0;font-size:17px;line-height:1.25;font-weight:700;color:#111827}
   .cc-campaign-close{border:0;background:transparent;color:#64748b;font-size:20px;line-height:1;cursor:pointer}
+  .cc-campaign-card[data-image="flush"] .cc-campaign-close{position:absolute;right:10px;top:10px;z-index:2;width:30px;height:30px;border-radius:999px;background:rgba(15,23,42,.58);color:#fff;display:flex;align-items:center;justify-content:center}
+  .cc-campaign-hero-img{display:block;width:100%;height:190px;object-fit:cover;background:#f8fafc}
   .cc-campaign-body{padding:14px 16px 16px}
   .cc-campaign-text{margin:0 0 12px;color:#334155;white-space:pre-wrap}
   .cc-campaign-img{width:100%;max-height:220px;object-fit:cover;border-radius:10px;margin-bottom:12px;background:#f8fafc}
@@ -563,6 +587,64 @@
   function injectStyle(){
     if (D.getElementById('cc-embed-style')) return;
     const s = D.createElement('style'); s.id='cc-embed-style'; s.textContent = buildSearchStyles(); D.head.appendChild(s);
+  }
+  function normalizeDockPosition(raw){
+    const value = String(raw || '').toLowerCase().replace(/_/g, '-').trim();
+    if (['left', 'left-bottom', 'bottom-left'].includes(value)) return 'left';
+    if (['bottom', 'middle-bottom', 'center', 'center-bottom', 'bottom-center', 'floating'].includes(value)) return 'middle-bottom';
+    return 'right';
+  }
+  function normalizeDockDensity(raw){
+    return String(raw || '').toLowerCase().trim() === 'relaxed' ? 'relaxed' : 'compact';
+  }
+  function dockIconSvg(kind){
+    if (kind === 'search') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>';
+    if (kind === 'chat') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>';
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16"></path><path d="M5 5v14"></path><path d="M19 5v14"></path><path d="M8 9h8"></path><path d="M8 13h5"></path></svg>';
+  }
+  function createDock(controllers){
+    const items = [];
+    if (controllers?.search) items.push({ kind:'search', label:'Search', open: controllers.search.open });
+    if (controllers?.chat) items.push({ kind:'chat', label: cfg.chat?.name || COMPASS_AI_NAME, open: controllers.chat.open });
+    if (cfg.messages?.enabled) items.push({ kind:'campaign', label:'Campaigns', open: openDockCampaign });
+    if (!items.length) return null;
+    injectStyle();
+    const dock = D.createElement('div');
+    dock.className = 'cc-dock';
+    dock.setAttribute('data-position', normalizeDockPosition(cfg.dock?.position));
+    dock.setAttribute('data-density', normalizeDockDensity(cfg.dock?.density));
+    dock.setAttribute('role', 'toolbar');
+    dock.setAttribute('aria-label', 'Compass tools');
+    const brand = D.createElement('span');
+    brand.className = 'cc-dock-brand';
+    brand.textContent = 'Compass';
+    dock.appendChild(brand);
+    dock.appendChild(Object.assign(D.createElement('span'), { className:'cc-dock-sep' }));
+    items.forEach((item)=>{
+      const btn = D.createElement('button');
+      btn.type = 'button';
+      btn.className = 'cc-dock-icon';
+      btn.setAttribute('aria-label', item.label);
+      btn.setAttribute('title', item.label);
+      btn.setAttribute('data-kind', item.kind);
+      btn.innerHTML = dockIconSvg(item.kind);
+      if (item.kind === 'campaign') {
+        const alert = D.createElement('span');
+        alert.className = 'cc-dock-alert';
+        btn.appendChild(alert);
+      }
+      btn.addEventListener('click', item.open);
+      dock.appendChild(btn);
+    });
+    D.body.appendChild(dock);
+    updateCampaignDockAlert();
+    return dock;
+  }
+  function updateCampaignDockAlert(){
+    try{
+      const btn = D.querySelector('.cc-dock-icon[data-kind="campaign"]');
+      if (btn) btn.setAttribute('data-alert', lastDismissedCampaignMessage ? 'true' : 'false');
+    }catch{}
   }
 
   function createSearch(){
@@ -669,36 +751,6 @@
       if (url){ close(); W.location.href = url }
     }
 
-    // Floating launcher button
-    const btn = D.createElement('button'); btn.type='button'; btn.className='cc-search-btn';
-
-    const logoWrap = D.createElement('span'); logoWrap.className='cc-search-logo-wrap';
-    const logoImg = D.createElement('img'); logoImg.className='cc-search-logo'; logoImg.alt='Credibility Compass';
-    function updateLogo(){
-      try{
-        const dark = isDarkMode();
-        const src = dark ? (cfg.search.logoDark || cfg.search.logoLight) : cfg.search.logoLight;
-        if (src) logoImg.src = src;
-      }catch{}
-    }
-    updateLogo();
-    if (darkMql){
-      try{
-        if (darkMql.addEventListener) darkMql.addEventListener('change', updateLogo);
-        else if (darkMql.addListener) darkMql.addListener(updateLogo);
-      }catch{}
-    }
-    logoWrap.appendChild(logoImg);
-
-    const labelSpan = D.createElement('span'); labelSpan.className='cc-search-label'; labelSpan.textContent='Search';
-    const kbdEl = D.createElement('kbd'); kbdEl.className='cc-search-kbd'; kbdEl.textContent='⌘/Ctrl K';
-
-    btn.appendChild(logoWrap);
-    btn.appendChild(labelSpan);
-    btn.appendChild(kbdEl);
-
-    btn.addEventListener('click', open); D.body.appendChild(btn);
-
     // Global hotkey (kept as your working version)
     D.addEventListener('keydown', (e)=>{
       const k = (e.ctrlKey || e.metaKey) && e.key?.toLowerCase() === 'k';
@@ -709,6 +761,7 @@
     function trackSearchUI(action){ enqueue('search_ui', { action }) }
     function trackSearchQuery(q, total){ enqueue('search_query', { q, total }) }
     function trackSearchSelect(it){ enqueue('search_select', { id: it.id || null, title: it.title || it.name || null, url: it.url || it.href || null }) }
+    return { open, close };
   }
 
   function createChat(){
@@ -1196,34 +1249,13 @@
       enqueue('chat_ui', { action: 'close' });
     }
 
-    const btn = D.createElement('button'); btn.type = 'button'; btn.className = 'cc-chat-btn';
-    const logoWrap = D.createElement('span'); logoWrap.className = 'cc-chat-logo-wrap';
-    const logoImg = D.createElement('img'); logoImg.className = 'cc-chat-logo'; logoImg.alt = cfg.chat.name || COMPASS_AI_NAME;
-    function updateChatLogo(){
-      try{
-        const dark = isDarkMode();
-        const src = dark ? (cfg.chat.logoDark || cfg.chat.logoLight) : cfg.chat.logoLight;
-        if (src) logoImg.src = src;
-      }catch{}
-    }
-    updateChatLogo();
-    if (darkMql){
-      try{
-        if (darkMql.addEventListener) darkMql.addEventListener('change', updateChatLogo);
-        else if (darkMql.addListener) darkMql.addListener(updateChatLogo);
-      }catch{}
-    }
-    logoWrap.appendChild(logoImg);
-    const label = D.createElement('span'); label.textContent = cfg.chat.launcherLabel || `Ask ${COMPASS_AI_NAME}`;
-    btn.appendChild(logoWrap);
-    btn.appendChild(label);
-    btn.addEventListener('click', open);
-    D.body.appendChild(btn);
+    return { open, close };
   }
 
   // --- Campaign messages -----------------------------------------------------
   let campaignOpen = false;
   const campaignSeen = new Set();
+  let lastDismissedCampaignMessage = null;
 
   function campaignUrl(path){
     const base = String(cfg.messages?.base || '').replace(/\/+$/, '');
@@ -1272,6 +1304,10 @@
   }
   function applyCampaignActionsLayout(el, delivery, layout){
     el.className = `cc-campaign-actions${campaignActionListLayout(delivery, layout) === 'stacked' ? ' cc-campaign-actions-stacked' : ''}`;
+  }
+  function campaignImagePlacement(image){
+    const raw = String(image?.placement || image?.display || '').toLowerCase();
+    return raw === 'flush_top' || raw === 'flush' || image?.flush === true ? 'flush' : 'contained';
   }
   function campaignCtx(){
     const ctx = currentCtx();
@@ -1354,7 +1390,7 @@
     card.appendChild(body);
     root.appendChild(card);
     if (isModal) root.addEventListener('click', (e)=>{ if (e.target === root) onClose() });
-    return { root, titleWrap, body };
+    return { root, card, titleWrap, body };
   }
   function renderCampaignImage(parent, image){
     const src = safeHref(image?.url);
@@ -1365,6 +1401,27 @@
     img.alt = String(image?.alt || '');
     img.loading = 'lazy';
     parent.appendChild(img);
+  }
+  function clearCampaignHero(card){
+    try{
+      card.removeAttribute('data-image');
+      const hero = card.querySelector('[data-cc-campaign-hero="true"]');
+      if (hero) hero.remove();
+    }catch{}
+  }
+  function renderCampaignHero(card, image){
+    clearCampaignHero(card);
+    const src = safeHref(image?.url);
+    if (!src || campaignImagePlacement(image) !== 'flush') return false;
+    card.setAttribute('data-image', 'flush');
+    const img = D.createElement('img');
+    img.className = 'cc-campaign-hero-img';
+    img.setAttribute('data-cc-campaign-hero', 'true');
+    img.src = src;
+    img.alt = String(image?.alt || '');
+    img.loading = 'lazy';
+    card.insertBefore(img, card.firstChild);
+    return true;
   }
   function readStepFields(step, container){
     const out = {};
@@ -1407,11 +1464,23 @@
     btn.textContent = String(label || 'Continue');
     return btn;
   }
-  function renderCampaignMessage(message){
+  function openDockCampaign(){
     if (campaignOpen) return;
+    if (lastDismissedCampaignMessage) {
+      const message = lastDismissedCampaignMessage;
+      lastDismissedCampaignMessage = null;
+      updateCampaignDockAlert();
+      renderCampaignMessage(message, { force:true });
+      return;
+    }
+    scheduleCampaignPoll(0);
+  }
+  function renderCampaignMessage(message, options){
+    if (campaignOpen) return;
+    const force = !!options?.force;
     const campaignId = message?.campaignId;
     const delivery = message?.delivery || {};
-    if (!campaignId || campaignSeen.has(String(campaignId))) return;
+    if (!campaignId || (!force && campaignSeen.has(String(campaignId)))) return;
     campaignSeen.add(String(campaignId));
     campaignOpen = true;
     injectStyle();
@@ -1420,11 +1489,13 @@
     const layout = hasWizardSteps ? 'wizard' : (delivery.layout || 'modal');
     const close = ()=>{
       try{ recordCampaign(campaignId, 'interaction', { interactionType:'dismiss', deliveryAttemptId: message.deliveryAttemptId }) }catch{}
+      lastDismissedCampaignMessage = message;
+      updateCampaignDockAlert();
       try{ root.remove() }catch{}
       campaignOpen = false;
     };
     const shell = buildCampaignShell(layout, close);
-    const { root, titleWrap, body } = shell;
+    const { root, card, titleWrap, body } = shell;
     const wizardState = { fields: {} };
 
     function renderStep(stepIndex){
@@ -1432,9 +1503,11 @@
       const step = steps[stepIndex] || {};
       titleWrap.innerHTML = '';
       body.innerHTML = '';
+      const heroImage = step.image || delivery.image;
+      const isHero = renderCampaignHero(card, heroImage);
       appendText(titleWrap, 'h2', 'cc-campaign-title', step.title || delivery.title || 'Message');
       if (steps.length > 1) appendText(body, 'div', 'cc-campaign-step-count', `${stepIndex + 1} / ${steps.length}`);
-      renderCampaignImage(body, step.image || delivery.image);
+      if (!isHero) renderCampaignImage(body, heroImage);
       if (step.body || delivery.body) appendText(body, 'p', 'cc-campaign-text', step.body || delivery.body);
       const stepType = String(step.type || 'content').toLowerCase();
       if (stepType === 'form' || stepType === 'lead_magnet') {
@@ -1514,8 +1587,9 @@
     if (layout === 'wizard' || steps.length) {
       renderStep(0);
     } else {
+      const isHero = renderCampaignHero(card, delivery.image);
       appendText(titleWrap, 'h2', 'cc-campaign-title', delivery.title || 'Message');
-      renderCampaignImage(body, delivery.image);
+      if (!isHero) renderCampaignImage(body, delivery.image);
       appendText(body, 'p', 'cc-campaign-text', delivery.body || '');
       const actions = D.createElement('div');
       applyCampaignActionsLayout(actions, delivery, layout);
@@ -1624,9 +1698,11 @@
     setInterval(flush, 5000);
 
     // Initialize search UI
-    createSearch();
+    const searchController = createSearch();
     // Initialize chat UI (optional)
-    createChat();
+    const chatController = createChat();
+    // Initialize unified Compass dock
+    createDock({ search: searchController, chat: chatController });
   }
 
   if (D.readyState === 'complete' || D.readyState === 'interactive') init();
