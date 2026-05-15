@@ -475,7 +475,9 @@
   .cc-dock[data-position="left"]{left:16px;bottom:16px}
   .cc-dock[data-position="bottom"],.cc-dock[data-position="middle-bottom"],.cc-dock[data-position="center"],.cc-dock[data-position="center-bottom"]{left:50%;bottom:16px;transform:translateX(-50%)}
   .cc-dock[data-density="relaxed"]{padding:9px 12px;gap:11px}
-  .cc-dock-brand{white-space:nowrap;padding-right:2px;color:#111827}
+  .cc-dock-brand{white-space:nowrap;padding-right:2px;color:#111827;display:inline-flex;align-items:center;gap:7px}
+  .cc-dock-logo-wrap{width:22px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:rgba(17,24,39,.04);overflow:hidden;flex-shrink:0}
+  .cc-dock-logo{width:18px;height:18px;display:block}
   .cc-dock-sep{width:1px;height:22px;background:#e5e7eb}
   .cc-dock-icon{position:relative;width:28px;height:28px;border:0;border-radius:999px;background:transparent;color:#111827;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
   .cc-dock-icon:hover{background:#f3f4f6;color:${chatAccent}}
@@ -574,7 +576,7 @@
   .cc-campaign-action-button{border:1px solid #d1d5db;background:#fff;color:#111827;border-radius:8px;padding:9px 13px;box-shadow:0 1px 2px rgba(15,23,42,.08)}
   .cc-campaign-action-button:hover{background:#f9fafb;border-color:#9ca3af}
   .cc-campaign-action-button-accent{border-color:${escapeHTML(cfg.messages?.accent || '#336699')};background:${escapeHTML(cfg.messages?.accent || '#336699')};color:${escapeHTML(contrastTextForColor(cfg.messages?.accent || '#336699'))}}
-  .cc-campaign-action-button-accent:hover{filter:brightness(.96)}
+  .cc-campaign-action-button-accent:hover{border-color:${escapeHTML(cfg.messages?.accent || '#336699')};background:${escapeHTML(cfg.messages?.accent || '#336699')};color:${escapeHTML(contrastTextForColor(cfg.messages?.accent || '#336699'))};filter:brightness(.96)}
   .cc-campaign-action-link{color:${escapeHTML(cfg.messages?.accent || '#336699')};padding:4px 0;text-decoration:underline;text-underline-offset:3px}
   .cc-campaign-actions-stacked .cc-campaign-action-button{display:block;width:100%}
   .cc-campaign-field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
@@ -617,7 +619,32 @@
     dock.setAttribute('aria-label', 'Compass tools');
     const brand = D.createElement('span');
     brand.className = 'cc-dock-brand';
-    brand.textContent = 'Compass';
+    const brandLogoWrap = D.createElement('span');
+    brandLogoWrap.className = 'cc-dock-logo-wrap';
+    const brandLogo = D.createElement('img');
+    brandLogo.className = 'cc-dock-logo';
+    brandLogo.alt = 'Credibility Compass';
+    function updateDockLogo(){
+      try{
+        const dark = isDarkMode();
+        const src = dark
+          ? (cfg.search?.logoDark || cfg.chat?.logoDark || cfg.search?.logoLight || cfg.chat?.logoLight)
+          : (cfg.search?.logoLight || cfg.chat?.logoLight || cfg.search?.logoDark || cfg.chat?.logoDark);
+        if (src) brandLogo.src = src;
+      }catch{}
+    }
+    updateDockLogo();
+    if (darkMql){
+      try{
+        if (darkMql.addEventListener) darkMql.addEventListener('change', updateDockLogo);
+        else if (darkMql.addListener) darkMql.addListener(updateDockLogo);
+      }catch{}
+    }
+    const brandText = D.createElement('span');
+    brandText.textContent = 'Compass';
+    brandLogoWrap.appendChild(brandLogo);
+    brand.appendChild(brandLogoWrap);
+    brand.appendChild(brandText);
     dock.appendChild(brand);
     dock.appendChild(Object.assign(D.createElement('span'), { className:'cc-dock-sep' }));
     items.forEach((item)=>{
